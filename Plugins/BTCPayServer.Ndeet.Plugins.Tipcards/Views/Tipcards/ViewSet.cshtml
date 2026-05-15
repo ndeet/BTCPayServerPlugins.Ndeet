@@ -1,0 +1,135 @@
+@using BTCPayServer.Abstractions.Contracts
+@using BTCPayServer.Abstractions.Extensions
+@using BTCPayServer.Client
+@using BTCPayServer.Components.QRCode
+@using BTCPayServer.Ndeet.Plugins.Tipcards
+@using BTCPayServer.Ndeet.Plugins.Tipcards.ViewModels
+@using BTCPayServer.Security
+@using Microsoft.AspNetCore.Mvc.TagHelpers
+@inject IScopeProvider ScopeProvider
+@inject ContentSecurityPolicies Csp
+@model TipcardSetDetailViewModel
+@{
+    Layout = "_Layout";
+    var storeId = ScopeProvider.GetCurrentStoreId();
+    ViewData.SetLayoutModel(new LayoutModel(nameof(TipcardsPages.Sets), Model.Name) { ActiveCategory = nameof(TipcardsPages) });
+    var totalCards = Model.Cards.Count;
+}
+
+<style>
+    .stats-bar { display: flex; gap: 2rem; justify-content: center; padding: 1.25rem; background: var(--btcpay-body-bg, #f8f9fa); border-radius: 8px; margin-bottom: 1.5rem; }
+    .stats-bar .stat { text-align: center; }
+    .stats-bar .stat-value { font-size: 1.25rem; font-weight: 700; }
+    .stats-bar .stat-sub { font-size: 0.8rem; color: var(--btcpay-body-text-muted); }
+    .stats-bar .stat-label { font-size: 0.85rem; color: var(--btcpay-body-text-muted); }
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }
+    .tipcard-item { border: 1px solid var(--btcpay-body-border-light, #dee2e6); border-radius: 8px; padding: 0.75rem; text-align: center; position: relative; transition: all 0.2s; }
+    .tipcard-item.claimed { opacity: 0.35; filter: blur(1px); }
+    .tipcard-item.claimed:hover { opacity: 0.7; filter: none; }
+    .tipcard-item .card-number { font-size: 0.75rem; color: var(--btcpay-body-text-muted); }
+    .tipcard-item .card-sats { font-weight: 700; font-size: 1.1rem; }
+    .tipcard-item .card-badge { position: absolute; top: 8px; right: 8px; }
+    .tipcard-item .qr-container { position: relative; display: inline-block; margin: 0.5rem auto; }
+    .tipcard-item .qr-container img { width: 140px; height: 140px; image-rendering: pixelated; }
+    .qr-logo-overlay {
+        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        width: 32px; height: 32px; border-radius: 4px; padding: 2px;
+        display: flex; align-items: center; justify-content: center;
+    }
+    .qr-logo-overlay svg { width: 28px; height: 28px; }
+    .card-filter { margin-bottom: 1rem; }
+</style>
+
+<div class="sticky-header-setup"></div>
+<div class="sticky-header d-sm-flex align-items-center justify-content-between">
+    <h2 class="mb-0">@ViewData["Title"]</h2>
+    <div class="d-flex gap-2 mt-3 mt-sm-0">
+        <a asp-action="EditSet" asp-controller="Tipcards" asp-route-storeId="@storeId" asp-route-setId="@Model.SetId" class="btn btn-secondary">
+            Edit
+        </a>
+        <a asp-action="PrintSet" asp-controller="Tipcards" asp-route-storeId="@storeId" asp-route-setId="@Model.SetId" class="btn btn-secondary">
+            Print
+        </a>
+        <a asp-action="ListSets" asp-controller="Tipcards" asp-route-storeId="@storeId" class="btn btn-outline-secondary">
+            All Sets
+        </a>
+    </div>
+</div>
+
+<partial name="_StatusMessage" />
+
+@if (!Model.LightningConfigured)
+{
+    <div class="alert alert-warning d-flex align-items-center mt-3" role="alert">
+        <vc:icon symbol="warning" />
+        <div class="ms-3">
+            <strong>Lightning payouts not configured.</strong>
+            Tipcards require Lightning (BTC-LN) payouts to be enabled for LNURL-withdraw to work.
+        </div>
+    </div>
+}
+
+<div class="stats-bar">
+    <div class="stat">
+        <div class="stat-value text-success">@Model.ClaimedSats.ToString("N0")</div>
+        <div class="stat-sub">(@Model.ClaimedCount cards)</div>
+        <div class="stat-label">Claimed</div>
+    </div>
+    <div class="stat">
+        <div class="stat-value text-warning">@Model.FundedSats.ToString("N0")</div>
+        <div class="stat-sub">(@Model.FundedCount cards)</div>
+        <div class="stat-label">Available</div>
+    </div>
+    <div class="stat">
+        <div class="stat-value">@((Model.ClaimedSats + Model.FundedSats).ToString("N0"))</div>
+        <div class="stat-sub">(@totalCards cards)</div>
+        <div class="stat-label">Total sats</div>
+    </div>
+</div>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="card-filter">
+        <select id="cardFilter" class="form-select form-select-sm" style="width: auto;">
+            <option value="all">All cards</option>
+            <option value="available">Available only</option>
+            <option value="claimed">Claimed only</option>
+        </select>
+    </div>
+    <small class="text-muted">@Model.SatsPerCard.ToString("N0") sats/card &middot; Created @Model.CreatedDate.ToString("yyyy-MM-dd")</small>
+</div>
+
+<div class="card-grid" id="cardGrid">
+    @for (int i = 0; i < Model.Cards.Count; i++)
+    {
+        var card = Model.Cards[i];
+        <div class="tipcard-item @(card.IsClaimed ? "claimed" : "")" data-status="@(card.IsClaimed ? "claimed" : "available")">
+            @if (card.IsClaimed)
+            {
+                <span class="card-badge badge bg-warning">Claimed</span>
+            }
+            <div class="card-number">#@(i + 1)</div>
+            <div class="card-sats">@card.Sats.ToString("N0") sats</div>
+            <div class="qr-container">
+                <vc:qr-code data="@card.ClaimUrl" size="140"></vc:qr-code>
+                <partial name="_QrLogoOverlay" model="Model.QrLogo" />
+            </div>
+            <div class="mt-1">
+                <a href="@card.ClaimUrl" target="_blank" class="btn btn-sm btn-outline-primary">Claim Page</a>
+            </div>
+        </div>
+    }
+</div>
+
+@section PageFootContent {
+    <script>
+        document.getElementById('cardFilter').addEventListener('change', function() {
+            const filter = this.value;
+            document.querySelectorAll('.tipcard-item').forEach(function(el) {
+                const status = el.getAttribute('data-status');
+                if (filter === 'all') el.style.display = '';
+                else if (filter === status) el.style.display = '';
+                else el.style.display = 'none';
+            });
+        });
+    </script>
+}

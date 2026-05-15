@@ -1,0 +1,136 @@
+@using BTCPayServer.Components.QRCode
+@using BTCPayServer.Ndeet.Plugins.Tipcards
+@using BTCPayServer.Ndeet.Plugins.Tipcards.ViewModels
+@using BTCPayServer.Security
+@using Microsoft.AspNetCore.Mvc.TagHelpers
+@model TipcardClaimViewModel
+@inject ContentSecurityPolicies Csp
+@{
+    Layout = null;
+    var hasLnurl = Model.SupportsLNURL && !string.IsNullOrEmpty(Model.LnurlBech32);
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@Model.Headline</title>
+    <link href="~/main/bootstrap/bootstrap.css" asp-append-version="true" rel="stylesheet" />
+    <link href="~/main/fonts/OpenSans.css" asp-append-version="true" rel="stylesheet" />
+    <link href="~/main/layout.css" asp-append-version="true" rel="stylesheet" />
+    <link href="~/main/site.css" asp-append-version="true" rel="stylesheet" />
+    <link href="~/main/themes/default.css" asp-append-version="true" rel="stylesheet" />
+    @if (!string.IsNullOrEmpty(Model.CssUrl))
+    {
+        <link href="@Model.CssUrl" rel="stylesheet" />
+    }
+    <meta name="robots" content="noindex,nofollow">
+    <style>
+        body { background: var(--btcpay-body-bg, #f8f9fa); }
+        .claim-card { max-width: 420px; margin: 0 auto; }
+        .sats-amount { font-size: 2.5rem; font-weight: 700; }
+        .fiat-amount { font-size: 0.9rem; color: var(--btcpay-body-text-muted, #6c757d); }
+        .wallet-list a { text-decoration: none; }
+        .wallet-list .card { transition: transform 0.1s; }
+        .wallet-list .card:hover { transform: translateY(-2px); }
+        .qr-container { position: relative; display: inline-block; }
+        .qr-logo-overlay {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 40px; height: 40px; border-radius: 6px; padding: 4px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .qr-logo-overlay svg { width: 28px; height: 28px; }
+    </style>
+</head>
+<body>
+<div class="container py-4">
+    <div class="claim-card text-center">
+        @if (!string.IsNullOrEmpty(Model.LogoUrl))
+        {
+            <img src="@Model.LogoUrl" alt="@Model.StoreName" class="mb-3" style="max-height: 60px;" />
+        }
+        <p class="text-muted mb-4">@Model.StoreName</p>
+
+        @if (Model.IsClaimed)
+        {
+            <div class="card border-warning">
+                <div class="card-body py-5">
+                    <h2 class="mb-3">Already Claimed</h2>
+                    <p class="text-muted">This tipcard has already been redeemed.</p>
+                    <p class="sats-amount text-muted"><s>@Model.Sats.ToString("N0") sats</s></p>
+                </div>
+            </div>
+        }
+        else if (!hasLnurl)
+        {
+            <div class="card border-danger">
+                <div class="card-body py-5">
+                    <h2 class="mb-3">Claim Unavailable</h2>
+                    <p class="sats-amount my-3" style="color: var(--btcpay-brand, #51b13e);">
+                        @Model.Sats.ToString("N0") sats
+                    </p>
+                    @if (Model.FiatAmount.HasValue)
+                    {
+                        <p class="fiat-amount">&asymp; @Model.FiatAmount.Value.ToString("N2") @Model.FiatCurrency</p>
+                    }
+                    <p class="text-danger mt-3">
+                        This tipcard cannot be claimed right now. Lightning payouts are not configured on the server.
+                        Please contact the person who gave you this card.
+                    </p>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="card">
+                <div class="card-body">
+                    <h2 class="mb-2">@Model.Headline</h2>
+                    <p class="sats-amount my-3" style="color: var(--btcpay-brand, #51b13e);">
+                        @Model.Sats.ToString("N0") sats
+                    </p>
+                    @if (Model.FiatAmount.HasValue)
+                    {
+                        <p class="fiat-amount">&asymp; @Model.FiatAmount.Value.ToString("N2") @Model.FiatCurrency</p>
+                    }
+
+                    <div class="my-3 qr-container">
+                        <vc:qr-code data="@Model.LnurlBech32" size="256"></vc:qr-code>
+                        <partial name="_QrLogoOverlay" model="Model.QrLogo" />
+                    </div>
+
+                    <p class="text-muted small mt-2">@Model.CardText</p>
+
+                    <a href="lightning:@Model.LnurlBech32" class="btn btn-primary btn-lg w-100 mt-2">
+                        Open in Wallet
+                    </a>
+                </div>
+            </div>
+
+            @if (Model.ShowWalletRecommendations && Model.WalletRecommendations?.Any() == true)
+            {
+                <div class="mt-4">
+                    <h5 class="text-muted mb-3">Don't have a Lightning wallet yet?</h5>
+                    <div class="wallet-list d-flex flex-column gap-2">
+                        @foreach (var wallet in Model.WalletRecommendations)
+                        {
+                            <a href="@wallet.Url" target="_blank" rel="noopener noreferrer">
+                                <div class="card">
+                                    <div class="card-body py-2 d-flex justify-content-between align-items-center">
+                                        <div class="text-start">
+                                            <strong>@wallet.Name</strong>
+                                            <br />
+                                            <small class="text-muted">@wallet.Description</small>
+                                        </div>
+                                        <span class="text-muted">&rarr;</span>
+                                    </div>
+                                </div>
+                            </a>
+                        }
+                    </div>
+                </div>
+            }
+        }
+    </div>
+</div>
+</body>
+</html>

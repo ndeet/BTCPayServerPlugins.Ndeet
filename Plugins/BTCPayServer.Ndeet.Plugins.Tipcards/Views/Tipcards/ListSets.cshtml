@@ -1,0 +1,91 @@
+@using BTCPayServer.Abstractions.Contracts
+@using BTCPayServer.Abstractions.Extensions
+@using BTCPayServer.Client
+@using BTCPayServer.Ndeet.Plugins.Tipcards
+@using BTCPayServer.Ndeet.Plugins.Tipcards.ViewModels
+@inject IScopeProvider ScopeProvider
+@model ListTipcardSetsViewModel
+@{
+    Layout = "_Layout";
+    var storeId = ScopeProvider.GetCurrentStoreId();
+    ViewData.SetLayoutModel(new LayoutModel(nameof(TipcardsPages.Sets), "Tipcards") { ActiveCategory = nameof(TipcardsPages) });
+}
+
+<div class="sticky-header-setup"></div>
+<div class="sticky-header d-sm-flex align-items-center justify-content-between">
+    <h2 class="mb-0">@ViewData["Title"]</h2>
+    <div class="d-flex gap-3 mt-3 mt-sm-0">
+        <a asp-controller="Tipcards" asp-action="CreateSet" asp-route-storeId="@storeId" class="btn btn-primary">Create Set</a>
+    </div>
+</div>
+
+<partial name="_StatusMessage" />
+
+@if (!Model.LightningConfigured)
+{
+    <div class="alert alert-warning d-flex align-items-center mt-3" role="alert">
+        <vc:icon symbol="warning" />
+        <div class="ms-3">
+            <strong>Lightning payouts not configured.</strong>
+            Tipcards require Lightning (BTC-LN) payouts to be enabled. Please configure a Lightning wallet in your store's payout settings.
+        </div>
+    </div>
+}
+
+@if (Model.Sets.Any())
+{
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th scope="col">Name</th>
+                    <th scope="col">Cards</th>
+                    <th scope="col">Sats/Card</th>
+                    <th scope="col">Total Sats</th>
+                    <th scope="col">Claimed</th>
+                    <th scope="col">Created</th>
+                    <th scope="col" class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var set in Model.Sets)
+                {
+                    <tr>
+                        <td>
+                            <a asp-action="ViewSet" asp-controller="Tipcards" asp-route-storeId="@storeId" asp-route-setId="@set.Id">
+                                @set.Name
+                            </a>
+                        </td>
+                        <td>@set.TotalCards</td>
+                        <td>@set.SatsPerCard.ToString("N0")</td>
+                        <td>@((set.SatsPerCard * set.TotalCards).ToString("N0"))</td>
+                        <td>@set.ClaimedCards / @set.TotalCards</td>
+                        <td>@set.CreatedDate.ToString("yyyy-MM-dd")</td>
+                        <td class="text-end">
+                            <a asp-action="ViewSet" asp-controller="Tipcards" asp-route-storeId="@storeId" asp-route-setId="@set.Id">
+                                View
+                            </a>
+                            <span> - </span>
+                            <a asp-action="PrintSet" asp-controller="Tipcards" asp-route-storeId="@storeId" asp-route-setId="@set.Id">
+                                Print
+                            </a>
+                            <span> - </span>
+                            <a asp-action="DeleteSet" asp-controller="Tipcards" asp-route-storeId="@storeId" asp-route-setId="@set.Id"
+                               data-bs-toggle="modal" data-bs-target="#ConfirmModal"
+                               data-description="This will archive all pull payments in the set &quot;@set.Name&quot;. Are you sure?">
+                                Delete
+                            </a>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <partial name="_Confirm" model="@(new ConfirmModel("Delete Tipcard Set", "Are you sure you want to delete this set?", "Delete"))" />
+}
+else
+{
+    <p class="text-secondary mt-4">
+        No tipcard sets yet. Create one to get started.
+    </p>
+}

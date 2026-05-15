@@ -1,0 +1,40 @@
+@using BTCPayServer.Abstractions.Contracts
+@using BTCPayServer.Abstractions.Extensions
+@using BTCPayServer.Ndeet.Plugins.Tipcards
+@using BTCPayServer.Ndeet.Plugins.Tipcards.ViewModels
+@inject IScopeProvider ScopeProvider
+@model TipcardsSettingsViewModel
+@{
+    Layout = "_Layout";
+    var storeId = ScopeProvider.GetCurrentStoreId();
+    ViewData.SetLayoutModel(new LayoutModel(nameof(TipcardsPages.Settings), "Tipcards Settings") { ActiveCategory = nameof(TipcardsPages) });
+}
+
+<div class="sticky-header-setup"></div>
+<div class="sticky-header d-sm-flex align-items-center justify-content-between">
+    <h2 class="mb-0">@ViewData["Title"]</h2>
+</div>
+
+<partial name="_StatusMessage" />
+
+<div class="row">
+    <div class="col-xl-8 col-xxl-constrain">
+        <form method="post" asp-action="Settings" asp-route-storeId="@storeId">
+            <h4 class="mt-2 mb-3">Wallet Recommendations</h4>
+            <p class="text-muted">Configure which Lightning wallets are suggested to users on the claim page who don't have a wallet yet.</p>
+            <div class="form-group">
+                <div class="form-check">
+                    <input asp-for="ShowWalletRecommendations" class="form-check-input" type="checkbox" />
+                    <label asp-for="ShowWalletRecommendations" class="form-check-label"></label>
+                </div>
+            </div>
+            <div class="form-group">
+                <label asp-for="WalletRecommendationsJson" class="form-label"></label>
+                <textarea asp-for="WalletRecommendationsJson" class="form-control" rows="14" style="font-family: monospace; font-size: 0.85rem;"></textarea>
+                <div class="form-text">JSON array of wallets. Each item needs: name, url, description.</div>
+            </div>
+
+            <button type="submit" class="btn btn-primary mt-3">Save</button>
+        </form>
+    </div>
+</div>
