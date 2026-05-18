@@ -73,6 +73,18 @@ public class EditTipcardSetViewModel
     [Display(Name = "Set Name")]
     public string Name { get; set; }
 
+    [Required]
+    [Range(1, 1_000_000_000)]
+    [Display(Name = "Sats per card")]
+    public long SatsPerCard { get; set; }
+
+    [Required]
+    [Range(1, 500)]
+    [Display(Name = "Number of cards")]
+    public int NumberOfCards { get; set; }
+
+    public int ClaimedCount { get; set; }
+
     [Display(Name = "Card Headline")]
     public string CardHeadline { get; set; }
 
@@ -118,6 +130,7 @@ public class PrintTipcardSetViewModel
     public string SetName { get; set; }
     public long SatsPerCard { get; set; }
     public string CardHeadline { get; set; }
+    public string CardText { get; set; }
     public string StoreName { get; set; }
     public string LogoUrl { get; set; }
     public QrLogoType QrLogo { get; set; }

@@ -15,52 +15,157 @@
     <meta charset="utf-8" />
     <title>Print - @Model.SetName</title>
     <link href="~/main/bootstrap/bootstrap.css" asp-append-version="true" rel="stylesheet" />
+    <style id="pageStyle">
+        @@page { size: A4; margin: 10mm; }
+    </style>
     <style>
         * { box-sizing: border-box; }
         body { font-family: Arial, sans-serif; margin: 0; }
-        .no-print { padding: 16px; text-align: center; background: #f8f9fa; border-bottom: 1px solid #ddd; }
+
+        /* --- Options toolbar --- */
+        .print-options {
+            padding: 16px 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #ddd;
+        }
+        .print-options h4 { margin: 0 0 4px 0; }
+        .print-options .text-muted { font-size: 0.85rem; margin-bottom: 12px; }
+        .options-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            align-items: end;
+        }
+        .option-group {
+            display: flex;
+            flex-direction: column;
+        }
+        .option-group > label {
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: #666;
+            margin-bottom: 3px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .option-group select,
+        .option-group input[type="number"] {
+            padding: 5px 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 0.85rem;
+        }
+        .option-group input[type="number"] { width: 80px; }
+        .custom-size { display: none; gap: 8px; align-items: end; }
+        .custom-size.visible { display: flex; }
+        .custom-size .times { padding-bottom: 6px; color: #999; font-size: 0.9rem; }
+        .option-check {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding-bottom: 2px;
+        }
+        .option-check input[type="checkbox"] { width: 16px; height: 16px; accent-color: #0d6efd; }
+        .option-check span { font-size: 0.85rem; }
+        .btn-group-print { display: flex; gap: 8px; align-items: end; }
+
+        /* --- Print grid --- */
         .print-grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 12px;
-            padding: 12px;
+            grid-template-columns: repeat(var(--cols, 3), 1fr);
+            gap: 0;
+            padding: 0;
         }
+
+        /* --- Card --- */
         .tipcard {
-            border: 2px dashed #ccc;
-            border-radius: 12px;
-            padding: 12px;
+            padding: 8px 6px;
             text-align: center;
             page-break-inside: avoid;
             break-inside: avoid;
+            overflow: hidden;
         }
-        .tipcard .logo { max-height: 28px; margin-bottom: 4px; }
-        .tipcard .headline { font-size: 11px; font-weight: 600; margin: 2px 0; }
-        .tipcard .sats { font-size: 18px; font-weight: 700; margin: 4px 0; }
-        .tipcard .qr-container { position: relative; display: inline-block; margin: 4px auto; }
-        .tipcard .qr-container img { width: 140px; height: 140px; image-rendering: pixelated; }
-        .tipcard .store-name { font-size: 9px; color: #999; }
+        .tipcard .logo { max-height: 22px; margin-bottom: 2px; }
+        .tipcard .headline { font-size: 10px; font-weight: 600; margin: 1px 0; }
+        .tipcard .card-text { font-size: 7.5px; color: #555; margin: 1px 0 2px 0; line-height: 1.3; }
+        .tipcard .sats { font-size: 15px; font-weight: 700; margin: 2px 0; }
+        .tipcard .qr-container { position: relative; display: inline-block; margin: 2px auto; }
+        .tipcard .qr-container img { width: 100%; max-width: 140px; height: auto; image-rendering: pixelated; }
+        .tipcard .store-name { font-size: 7px; color: #999; margin-top: 1px; }
+
+        /* --- Cutting markers --- */
+        .print-grid.with-markers {
+            border-top: 0.5pt solid #888;
+            border-left: 0.5pt solid #888;
+        }
+        .print-grid.with-markers .tipcard {
+            border-right: 0.5pt solid #888;
+            border-bottom: 0.5pt solid #888;
+        }
+
+        /* --- QR logo overlay --- */
         .qr-logo-overlay {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            width: 30px; height: 30px; border-radius: 4px; padding: 3px;
+            width: 26px; height: 26px; border-radius: 4px; padding: 2px;
             display: flex; align-items: center; justify-content: center;
         }
-        .qr-logo-overlay svg { width: 22px; height: 22px; }
+        .qr-logo-overlay svg { width: 20px; height: 20px; }
+
         @@media print {
-            .no-print { display: none !important; }
-            .tipcard { border-color: #000; }
+            .print-options { display: none !important; }
             body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
     </style>
 </head>
 <body>
-    <div class="no-print">
+    <div class="print-options">
         <h4>@Model.SetName &mdash; @unclaimed.Count unclaimed cards at @Model.SatsPerCard.ToString("N0") sats each</h4>
-        <p class="text-muted mb-2">Only unclaimed cards are shown.</p>
-        <button class="btn btn-primary" onclick="window.print()">Print Cards</button>
-        <button class="btn btn-secondary ms-2" onclick="window.history.back()">Back</button>
+        <p class="text-muted">Only unclaimed cards are shown. Adjust settings below, then print.</p>
+        <div class="options-row">
+            <div class="option-group">
+                <label>Paper Size</label>
+                <select id="paperSize">
+                    <option value="A4" selected>A4 (210 &times; 297 mm)</option>
+                    <option value="A3">A3 (297 &times; 420 mm)</option>
+                    <option value="letter">US Letter (8.5 &times; 11 in)</option>
+                    <option value="custom">Custom</option>
+                </select>
+            </div>
+            <div class="custom-size" id="customSize">
+                <div class="option-group">
+                    <label>Width (mm)</label>
+                    <input type="number" id="customWidth" value="210" min="50" max="1000" />
+                </div>
+                <span class="times">&times;</span>
+                <div class="option-group">
+                    <label>Height (mm)</label>
+                    <input type="number" id="customHeight" value="297" min="50" max="1000" />
+                </div>
+            </div>
+            <div class="option-group">
+                <label>Columns</label>
+                <select id="columns">
+                    <option value="2">2</option>
+                    <option value="3" selected>3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                </select>
+            </div>
+            <div class="option-group">
+                <label>Cutting Markers</label>
+                <div class="option-check">
+                    <input type="checkbox" id="cuttingMarkers" checked />
+                    <span>Enabled</span>
+                </div>
+            </div>
+            <div class="btn-group-print">
+                <button class="btn btn-primary" onclick="window.print()">Print Cards</button>
+                <button class="btn btn-secondary" onclick="window.history.back()">Back</button>
+            </div>
+        </div>
     </div>
 
-    <div class="print-grid">
+    <div class="print-grid with-markers" id="printGrid">
         @foreach (var card in unclaimed)
         {
             <div class="tipcard">
@@ -68,15 +173,63 @@
                 {
                     <img src="@Model.LogoUrl" alt="" class="logo" />
                 }
-                <div class="headline">@Model.CardHeadline</div>
+                @if (!string.IsNullOrEmpty(Model.CardHeadline))
+                {
+                    <div class="headline">@Model.CardHeadline</div>
+                }
                 <div class="sats">@card.Sats.ToString("N0") sats</div>
                 <div class="qr-container">
                     <vc:qr-code data="@card.ClaimUrl" size="140"></vc:qr-code>
                     <partial name="_QrLogoOverlay" model="Model.QrLogo" />
                 </div>
+                @if (!string.IsNullOrEmpty(Model.CardText))
+                {
+                    <div class="card-text">@Model.CardText</div>
+                }
                 <div class="store-name">@Model.StoreName</div>
             </div>
         }
     </div>
+
+    <script>
+        (function () {
+            var pageStyle = document.getElementById('pageStyle');
+            var grid = document.getElementById('printGrid');
+            var paperSelect = document.getElementById('paperSize');
+            var customSizeEl = document.getElementById('customSize');
+            var customWidth = document.getElementById('customWidth');
+            var customHeight = document.getElementById('customHeight');
+            var columnsSelect = document.getElementById('columns');
+            var markersCheck = document.getElementById('cuttingMarkers');
+
+            var sizes = { 'A4': 'A4', 'A3': 'A3', 'letter': '215.9mm 279.4mm' };
+
+            function updatePageSize() {
+                var val = paperSelect.value;
+                customSizeEl.classList.toggle('visible', val === 'custom');
+                var size;
+                if (val === 'custom') {
+                    size = customWidth.value + 'mm ' + customHeight.value + 'mm';
+                } else {
+                    size = sizes[val];
+                }
+                pageStyle.textContent = '@@page { size: ' + size + '; margin: 10mm; }';
+            }
+
+            function updateColumns() {
+                grid.style.setProperty('--cols', columnsSelect.value);
+            }
+
+            function updateMarkers() {
+                grid.classList.toggle('with-markers', markersCheck.checked);
+            }
+
+            paperSelect.addEventListener('change', updatePageSize);
+            customWidth.addEventListener('input', updatePageSize);
+            customHeight.addEventListener('input', updatePageSize);
+            columnsSelect.addEventListener('change', updateColumns);
+            markersCheck.addEventListener('change', updateMarkers);
+        })();
+    </script>
 </body>
 </html>

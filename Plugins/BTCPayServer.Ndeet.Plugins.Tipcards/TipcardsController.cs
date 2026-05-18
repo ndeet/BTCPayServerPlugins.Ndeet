@@ -128,27 +128,13 @@ public class TipcardsController : Controller
             return RedirectToAction(nameof(ListSets), new { storeId });
         }
 
-        var selectedPaymentMethodIds = new[] { PayoutMethodId.Parse("BTC-CHAIN"), PayoutMethodId.Parse("BTC-LN") };
-        var paymentMethods = _payoutHandlers.GetSupportedPayoutMethods(HttpContext.GetStoreData());
-
         var setId = Encoders.Base58.EncodeData(RandomUtils.GetBytes(8));
         var amountInBtc = model.SatsPerCard / 100_000_000m;
         var pullPaymentIds = new List<string>();
 
         for (int i = 0; i < model.NumberOfCards; i++)
         {
-            var ppId = await _pullPaymentHostedService.CreatePullPayment(HttpContext.GetStoreData(), new()
-            {
-                Amount = amountInBtc,
-                Currency = "BTC",
-                Name = $"Tipcard {model.Name} #{i + 1}",
-                Description = $"tipcard-set:{setId}",
-                PayoutMethods = selectedPaymentMethodIds
-                    .Where(id => paymentMethods.Contains(id))
-                    .Select(c => c.ToString()).ToArray(),
-                BOLT11Expiration = TimeSpan.FromDays(365),
-                AutoApproveClaims = true
-            });
+            var ppId = await CreateCardPullPayment(setId, model.Name, i + 1, amountInBtc);
             pullPaymentIds.Add(ppId);
         }
 
@@ -250,10 +236,15 @@ public class TipcardsController : Controller
         if (set == null)
             return NotFound();
 
+        var claimedCount = await CountClaimedCards(set.PullPaymentIds);
+
         return View(new EditTipcardSetViewModel
         {
             SetId = set.Id,
             Name = set.Name,
+            SatsPerCard = set.SatsPerCard,
+            NumberOfCards = set.NumberOfCards,
+            ClaimedCount = claimedCount,
             CardHeadline = set.CardHeadline,
             CardText = set.CardText,
             QrLogo = set.QrLogo
@@ -274,6 +265,80 @@ public class TipcardsController : Controller
         var set = settings.Sets.FirstOrDefault(s => s.Id == setId);
         if (set == null)
             return NotFound();
+
+        var satsChanged = model.SatsPerCard != set.SatsPerCard;
+        var countChanged = model.NumberOfCards != set.NumberOfCards;
+
+        if (satsChanged || countChanged)
+        {
+            await using var ctx = _dbContextFactory.CreateContext();
+            var now = DateTimeOffset.UtcNow;
+
+            var claimedIds = new List<string>();
+            var unclaimedIds = new List<string>();
+
+            foreach (var ppId in set.PullPaymentIds)
+            {
+                var pp = await ctx.PullPayments
+                    .Include(p => p.Payouts)
+                    .FirstOrDefaultAsync(p => p.Id == ppId);
+                if (pp == null) continue;
+
+                var progress = _pullPaymentHostedService.CalculatePullPaymentProgress(pp, now);
+                if (progress.CompletedPercent > 0 || progress.AwaitingPercent > 0)
+                    claimedIds.Add(ppId);
+                else
+                    unclaimedIds.Add(ppId);
+            }
+
+            if (model.NumberOfCards < claimedIds.Count)
+            {
+                ModelState.AddModelError(nameof(model.NumberOfCards),
+                    $"Cannot reduce below {claimedIds.Count} (already claimed).");
+                model.ClaimedCount = claimedIds.Count;
+                return View(model);
+            }
+
+            var targetUnclaimed = model.NumberOfCards - claimedIds.Count;
+
+            if (satsChanged)
+            {
+                foreach (var ppId in unclaimedIds)
+                    await _pullPaymentHostedService.Cancel(new PullPaymentHostedService.CancelRequest(ppId));
+                set.PullPaymentIds.RemoveAll(id => unclaimedIds.Contains(id));
+
+                for (int i = 0; i < targetUnclaimed; i++)
+                {
+                    var ppId = await CreateCardPullPayment(set.Id, model.Name,
+                        claimedIds.Count + i + 1, model.SatsPerCard / 100_000_000m);
+                    set.PullPaymentIds.Add(ppId);
+                }
+            }
+            else if (countChanged)
+            {
+                if (targetUnclaimed > unclaimedIds.Count)
+                {
+                    var toAdd = targetUnclaimed - unclaimedIds.Count;
+                    for (int i = 0; i < toAdd; i++)
+                    {
+                        var ppId = await CreateCardPullPayment(set.Id, model.Name,
+                            set.PullPaymentIds.Count + i + 1, set.SatsPerCard / 100_000_000m);
+                        set.PullPaymentIds.Add(ppId);
+                    }
+                }
+                else if (targetUnclaimed < unclaimedIds.Count)
+                {
+                    var toRemove = unclaimedIds.Count - targetUnclaimed;
+                    var idsToRemove = unclaimedIds.TakeLast(toRemove).ToList();
+                    foreach (var ppId in idsToRemove)
+                        await _pullPaymentHostedService.Cancel(new PullPaymentHostedService.CancelRequest(ppId));
+                    set.PullPaymentIds.RemoveAll(id => idsToRemove.Contains(id));
+                }
+            }
+
+            set.SatsPerCard = model.SatsPerCard;
+            set.NumberOfCards = model.NumberOfCards;
+        }
 
         set.Name = model.Name;
         set.CardHeadline = model.CardHeadline;
@@ -378,6 +443,7 @@ public class TipcardsController : Controller
             SetName = set.Name,
             SatsPerCard = set.SatsPerCard,
             CardHeadline = set.CardHeadline,
+            CardText = set.CardText,
             StoreName = store.StoreName,
             LogoUrl = branding.LogoUrl,
             QrLogo = set.QrLogo
@@ -570,6 +636,25 @@ public class TipcardsController : Controller
     private async Task SaveSettings(TipcardsStoreSettings settings)
     {
         await _storeRepository.UpdateSetting(CurrentStore.Id, SettingsKey, settings);
+    }
+
+    private async Task<string> CreateCardPullPayment(string setId, string setName, int cardNumber, decimal amountInBtc)
+    {
+        var selectedPaymentMethodIds = new[] { PayoutMethodId.Parse("BTC-CHAIN"), PayoutMethodId.Parse("BTC-LN") };
+        var paymentMethods = _payoutHandlers.GetSupportedPayoutMethods(HttpContext.GetStoreData());
+
+        return await _pullPaymentHostedService.CreatePullPayment(HttpContext.GetStoreData(), new()
+        {
+            Amount = amountInBtc,
+            Currency = "BTC",
+            Name = $"Tipcard {setName} #{cardNumber}",
+            Description = $"tipcard-set:{setId}",
+            PayoutMethods = selectedPaymentMethodIds
+                .Where(id => paymentMethods.Contains(id))
+                .Select(c => c.ToString()).ToArray(),
+            BOLT11Expiration = TimeSpan.FromDays(365),
+            AutoApproveClaims = true
+        });
     }
 
     private async Task<int> CountClaimedCards(List<string> pullPaymentIds)

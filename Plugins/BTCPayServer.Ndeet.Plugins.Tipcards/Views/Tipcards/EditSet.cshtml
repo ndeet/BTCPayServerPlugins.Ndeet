@@ -25,6 +25,30 @@
                 <input asp-for="Name" class="form-control" />
                 <span asp-validation-for="Name" class="text-danger"></span>
             </div>
+            <div class="d-flex gap-3">
+                <div class="form-group flex-fill">
+                    <label asp-for="SatsPerCard" class="form-label" data-required></label>
+                    <input asp-for="SatsPerCard" class="form-control" type="number" min="1" max="1000000000" id="satsPerCard" />
+                    <span asp-validation-for="SatsPerCard" class="text-danger"></span>
+                    <div class="form-text">Changing this will recreate all unclaimed cards with new QR codes.</div>
+                </div>
+                <div class="form-group flex-fill">
+                    <label asp-for="NumberOfCards" class="form-label" data-required></label>
+                    <input asp-for="NumberOfCards" class="form-control" type="number" min="1" max="500" id="numberOfCards" />
+                    <span asp-validation-for="NumberOfCards" class="text-danger"></span>
+                    @if (Model.ClaimedCount > 0)
+                    {
+                        <div class="form-text">@Model.ClaimedCount already claimed &mdash; minimum is @Model.ClaimedCount.</div>
+                    }
+                </div>
+            </div>
+            <div class="form-group">
+                <div class="bg-light rounded p-2 d-flex gap-3 align-items-center">
+                    <span class="text-muted">Total:</span>
+                    <strong id="totalSats">@((Model.SatsPerCard * Model.NumberOfCards).ToString("N0"))</strong>
+                    <span class="text-muted">sats</span>
+                </div>
+            </div>
             <div class="form-group">
                 <label asp-for="CardHeadline" class="form-label"></label>
                 <input asp-for="CardHeadline" class="form-control" />
@@ -33,7 +57,7 @@
             <div class="form-group">
                 <label asp-for="CardText" class="form-label"></label>
                 <textarea asp-for="CardText" class="form-control" rows="2"></textarea>
-                <div class="form-text">Shown on the claim page below the QR code.</div>
+                <div class="form-text">Shown on printed cards and the claim page below the QR code.</div>
             </div>
             <div class="form-group">
                 <label asp-for="QrLogo" class="form-label"></label>
@@ -54,3 +78,22 @@
         </form>
     </div>
 </div>
+
+@section PageFootContent {
+    <script>
+        (function () {
+            var satsInput = document.getElementById('satsPerCard');
+            var countInput = document.getElementById('numberOfCards');
+            var totalEl = document.getElementById('totalSats');
+
+            function updateTotal() {
+                var sats = parseInt(satsInput.value) || 0;
+                var count = parseInt(countInput.value) || 0;
+                totalEl.textContent = (sats * count).toLocaleString();
+            }
+
+            satsInput.addEventListener('input', updateTotal);
+            countInput.addEventListener('input', updateTotal);
+        })();
+    </script>
+}

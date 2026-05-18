@@ -76,9 +76,9 @@
         <div class="stat-label">Claimed</div>
     </div>
     <div class="stat">
-        <div class="stat-value text-warning">@Model.FundedSats.ToString("N0")</div>
+        <div class="stat-value">@Model.FundedSats.ToString("N0")</div>
         <div class="stat-sub">(@Model.FundedCount cards)</div>
-        <div class="stat-label">Available</div>
+        <div class="stat-label">Unclaimed</div>
     </div>
     <div class="stat">
         <div class="stat-value">@((Model.ClaimedSats + Model.FundedSats).ToString("N0"))</div>
@@ -86,6 +86,21 @@
         <div class="stat-label">Total sats</div>
     </div>
 </div>
+
+@if (!string.IsNullOrEmpty(Model.CardHeadline) || !string.IsNullOrEmpty(Model.CardText))
+{
+    <div class="card-content-preview mb-3 p-3" style="background: var(--btcpay-body-bg, #f8f9fa); border-radius: 8px; border: 1px solid var(--btcpay-body-border-light, #dee2e6);">
+        <small class="text-muted text-uppercase" style="font-size: 0.7rem; letter-spacing: 0.5px;">Card content</small>
+        @if (!string.IsNullOrEmpty(Model.CardHeadline))
+        {
+            <div style="font-weight: 600; margin-top: 2px;">@Model.CardHeadline</div>
+        }
+        @if (!string.IsNullOrEmpty(Model.CardText))
+        {
+            <div class="text-muted" style="font-size: 0.9rem;">@Model.CardText</div>
+        }
+    </div>
+}
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div class="card-filter">
