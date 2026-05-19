@@ -16,6 +16,7 @@
         <AddRazorSupportForMvc>true</AddRazorSupportForMvc>
         <PreserveCompilationContext>false</PreserveCompilationContext>
         <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
+        <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     </PropertyGroup>
 
     <!-- This will make sure that referencing BTCPayServer doesn't put any artifact in the published directory -->
@@ -29,5 +30,10 @@
 
     <ItemGroup>
         <ProjectReference Include="..\..\submodules\btcpayserver\BTCPayServer\BTCPayServer.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="PDFsharp" Version="6.2.4" />
+      <PackageReference Include="QRCoder" Version="1.8.0" />
     </ItemGroup>
 </Project>

@@ -8,6 +8,9 @@
 @{
     Layout = null;
     var unclaimed = Model.Cards.Where(c => !c.IsClaimed).ToList();
+    var storeId = ViewContext.RouteData.Values["storeId"]?.ToString();
+    var setId = ViewContext.RouteData.Values["setId"]?.ToString();
+    var pdfUrl = Url.Action("DownloadPdf", "Tipcards", new { storeId, setId });
 }
 <!DOCTYPE html>
 <html lang="en">
@@ -77,21 +80,34 @@
             padding: 0;
         }
 
-        /* --- Card --- */
+        /* --- Card: 2-column layout --- */
         .tipcard {
             padding: 8px 6px;
-            text-align: center;
             page-break-inside: avoid;
             break-inside: avoid;
             overflow: hidden;
         }
-        .tipcard .logo { max-height: 22px; margin-bottom: 2px; }
-        .tipcard .headline { font-size: 10px; font-weight: 600; margin: 1px 0; }
-        .tipcard .card-text { font-size: 7.5px; color: #555; margin: 1px 0 2px 0; line-height: 1.3; }
-        .tipcard .sats { font-size: 15px; font-weight: 700; margin: 2px 0; }
-        .tipcard .qr-container { position: relative; display: inline-block; margin: 2px auto; }
-        .tipcard .qr-container img { width: 100%; max-width: 140px; height: auto; image-rendering: pixelated; }
-        .tipcard .store-name { font-size: 7px; color: #999; margin-top: 1px; }
+        .tipcard-inner {
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+        }
+        .tipcard-qr {
+            flex: 0 1 auto;
+            text-align: center;
+        }
+        .tipcard-info {
+            flex: 1;
+            min-width: 0;
+            padding-top: 2px;
+        }
+        .tipcard .logo { max-height: 24px; margin-bottom: 4px; display: block; }
+        .tipcard .headline { font-size: 12px; font-weight: 600; margin: 0 0 3px 0; line-height: 1.2; }
+        .tipcard .card-text { font-size: 10px; color: #555; margin: 0 0 3px 0; line-height: 1.3; }
+        .tipcard .sats { font-size: 13px; font-weight: 700; margin: 3px 0 0 0; }
+        .tipcard .qr-container { position: relative; display: inline-block; }
+        .tipcard .qr-container img { width: 100%; max-width: 110px; height: auto; image-rendering: pixelated; }
+        .tipcard .store-name { font-size: 9px; color: #999; margin-top: 3px; }
 
         /* --- Cutting markers --- */
         .print-grid.with-markers {
@@ -120,7 +136,7 @@
 <body>
     <div class="print-options">
         <h4>@Model.SetName &mdash; @unclaimed.Count unclaimed cards at @Model.SatsPerCard.ToString("N0") sats each</h4>
-        <p class="text-muted">Only unclaimed cards are shown. Adjust settings below, then print.</p>
+        <p class="text-muted">Only unclaimed cards are shown. Adjust settings below, then download as PDF or print.</p>
         <div class="options-row">
             <div class="option-group">
                 <label>Paper Size</label>
@@ -159,8 +175,9 @@
                 </div>
             </div>
             <div class="btn-group-print">
-                <button class="btn btn-primary" onclick="window.print()">Print Cards</button>
-                <button class="btn btn-secondary" onclick="window.history.back()">Back</button>
+                <button class="btn btn-primary" onclick="downloadPdf()">Download PDF</button>
+                <button class="btn btn-secondary" onclick="window.print()">Print</button>
+                <button class="btn btn-outline-secondary" onclick="window.history.back()">Back</button>
             </div>
         </div>
     </div>
@@ -169,24 +186,30 @@
         @foreach (var card in unclaimed)
         {
             <div class="tipcard">
-                @if (!string.IsNullOrEmpty(Model.LogoUrl))
-                {
-                    <img src="@Model.LogoUrl" alt="" class="logo" />
-                }
-                @if (!string.IsNullOrEmpty(Model.CardHeadline))
-                {
-                    <div class="headline">@Model.CardHeadline</div>
-                }
-                <div class="sats">@card.Sats.ToString("N0") sats</div>
-                <div class="qr-container">
-                    <vc:qr-code data="@card.ClaimUrl" size="140"></vc:qr-code>
-                    <partial name="_QrLogoOverlay" model="Model.QrLogo" />
+                <div class="tipcard-inner">
+                    <div class="tipcard-qr">
+                        <div class="qr-container">
+                            <vc:qr-code data="@card.ClaimUrl" size="140"></vc:qr-code>
+                            <partial name="_QrLogoOverlay" model="Model.QrLogo" />
+                        </div>
+                        <div class="sats">@card.Sats.ToString("N0") sats</div>
+                    </div>
+                    <div class="tipcard-info">
+                        @if (!string.IsNullOrEmpty(Model.LogoUrl))
+                        {
+                            <img src="@Model.LogoUrl" alt="" class="logo" />
+                        }
+                        @if (!string.IsNullOrEmpty(Model.CardHeadline))
+                        {
+                            <div class="headline">@Model.CardHeadline</div>
+                        }
+                        @if (!string.IsNullOrEmpty(Model.CardText))
+                        {
+                            <div class="card-text">@Model.CardText</div>
+                        }
+                        <div class="store-name">@Model.StoreName</div>
+                    </div>
                 </div>
-                @if (!string.IsNullOrEmpty(Model.CardText))
-                {
-                    <div class="card-text">@Model.CardText</div>
-                }
-                <div class="store-name">@Model.StoreName</div>
             </div>
         }
     </div>
@@ -230,6 +253,20 @@
             columnsSelect.addEventListener('change', updateColumns);
             markersCheck.addEventListener('change', updateMarkers);
         })();
+
+        function downloadPdf() {
+            var paper = document.getElementById('paperSize').value;
+            var columns = document.getElementById('columns').value;
+            var markers = document.getElementById('cuttingMarkers').checked;
+            var params = 'paper=' + encodeURIComponent(paper)
+                + '&columns=' + encodeURIComponent(columns)
+                + '&markers=' + encodeURIComponent(markers);
+            if (paper === 'custom') {
+                params += '&customW=' + encodeURIComponent(document.getElementById('customWidth').value);
+                params += '&customH=' + encodeURIComponent(document.getElementById('customHeight').value);
+            }
+            window.location.href = '@Html.Raw(pdfUrl)' + '?' + params;
+        }
     </script>
 </body>
 </html>

@@ -473,6 +473,77 @@ public class TipcardsController : Controller
         return View(vm);
     }
 
+    [HttpGet("~/plugins/{storeId}/tipcards/{setId}/pdf")]
+    [Authorize(Policy = Policies.CanModifyStoreSettings, AuthenticationSchemes = AuthenticationSchemes.Cookie)]
+    public async Task<IActionResult> DownloadPdf(string storeId, string setId,
+        string paper = "A4", int columns = 3, bool markers = true,
+        double? customW = null, double? customH = null)
+    {
+        if (CurrentStore == null)
+            return NotFound();
+
+        var settings = await GetSettings();
+        var set = settings.Sets.FirstOrDefault(s => s.Id == setId);
+        if (set == null)
+            return NotFound();
+
+        var store = await _storeRepository.FindStore(storeId);
+
+        await using var ctx = _dbContextFactory.CreateContext();
+        var now = DateTimeOffset.UtcNow;
+
+        var (pageW, pageH) = paper switch
+        {
+            "A3" => (297.0, 420.0),
+            "letter" => (215.9, 279.4),
+            "custom" => (customW ?? 210, customH ?? 297),
+            _ => (210.0, 297.0)
+        };
+
+        var pdfRequest = new TipcardPdfRequest
+        {
+            PageWidthMm = pageW,
+            PageHeightMm = pageH,
+            Columns = Math.Clamp(columns, 1, 10),
+            CuttingMarkers = markers,
+            SetName = set.Name,
+            CardHeadline = set.CardHeadline,
+            CardText = set.CardText,
+            StoreName = store.StoreName,
+            QrLogo = set.QrLogo
+        };
+
+        foreach (var ppId in set.PullPaymentIds)
+        {
+            var pp = await ctx.PullPayments
+                .Include(p => p.Payouts)
+                .FirstOrDefaultAsync(p => p.Id == ppId);
+            if (pp == null) continue;
+
+            var progress = _pullPaymentHostedService.CalculatePullPaymentProgress(pp, now);
+            if (progress.CompletedPercent > 0 || progress.AwaitingPercent > 0)
+                continue;
+
+            pdfRequest.Cards.Add(new TipcardPdfItem
+            {
+                ClaimUrl = BuildClaimUrl(ppId),
+                Sats = set.SatsPerCard
+            });
+        }
+
+        try
+        {
+            var pdfBytes = TipcardPdfGenerator.Generate(pdfRequest);
+            var filename = set.Name.Replace(" ", "_") + "_tipcards.pdf";
+            return File(pdfBytes, "application/pdf", filename);
+        }
+        catch (Exception ex)
+        {
+            TempData[WellKnownTempData.ErrorMessage] = $"Failed to generate PDF: {ex.Message}";
+            return RedirectToAction(nameof(ViewSet), new { storeId, setId });
+        }
+    }
+
     [HttpGet("~/plugins/{storeId}/tipcards/{setId}/delete")]
     [Authorize(Policy = Policies.CanModifyStoreSettings, AuthenticationSchemes = AuthenticationSchemes.Cookie)]
     public async Task<IActionResult> DeleteSet(string storeId, string setId)

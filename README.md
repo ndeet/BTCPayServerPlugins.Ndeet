@@ -2,6 +2,8 @@
 
 My plugin repository for [BTCPay Server](https://github.com/btcpayserver/btcpayserver).
 
+Note: All plugins in this repo are vibe coded. Handle with care ;)
+
 Forked from great multi plugin repository from RockstarDev: https://github.com/rockstardev/BTCPayServerPlugins.RockstarDev
 
 ## Plugins
