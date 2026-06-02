@@ -1,0 +1,8 @@
+@model BTCPayServer.Components.MainNav.MainNavViewModel
+
+<li class="nav-item nav-item-sub" permission="@Policies.CanModifyServerSettings">
+    <a asp-controller="AmbassadorToolbox"
+       asp-action="Index"
+       layout-menu-item="@nameof(AmbassadorToolboxPlugin)"
+       text-translate="true">Ambassador Toolbox</a>
+</li>

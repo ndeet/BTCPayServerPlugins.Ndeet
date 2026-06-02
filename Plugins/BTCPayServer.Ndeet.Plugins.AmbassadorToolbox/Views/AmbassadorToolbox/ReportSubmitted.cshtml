@@ -1,0 +1,24 @@
+@model MerchantReportSubmittedViewModel
+@{
+    Layout = null;
+    ViewData["Title"] = "Report submitted";
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <partial name="LayoutHead" />
+    <meta name="robots" content="noindex,nofollow">
+    <link href="~/checkout/checkout.css" asp-append-version="true" rel="stylesheet" />
+</head>
+<body class="min-vh-100">
+<div class="public-page-wrap">
+    <main class="tile">
+        <section class="text-center">
+            <h2 class="mb-3">@ViewData["Title"]</h2>
+            <p class="text-muted">Your report for @Model.StoreName has been sent to the BTCPay Server operator.</p>
+            <a asp-controller="UIInvoice" asp-action="Checkout" asp-route-invoiceId="@Model.InvoiceId" class="btn btn-secondary rounded-pill w-100 mt-3">Back to checkout</a>
+        </section>
+    </main>
+</div>
+</body>
+</html>

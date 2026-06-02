@@ -1,0 +1,65 @@
+@model MerchantReportViewModel
+@{
+    Layout = null;
+    ViewData["Title"] = "Report this merchant";
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <partial name="LayoutHead" />
+    <meta name="robots" content="noindex,nofollow">
+    <link href="~/checkout/checkout.css" asp-append-version="true" rel="stylesheet" />
+</head>
+<body class="min-vh-100">
+<div class="public-page-wrap">
+    <main class="tile">
+        <section>
+            <h2 class="text-center mb-3">@ViewData["Title"]</h2>
+            <p class="text-muted text-center">Submit this report to the BTCPay Server operator for review.</p>
+            <dl class="mt-4">
+                <div>
+                    <dt>Merchant</dt>
+                    <dd>@Model.StoreName</dd>
+                </div>
+                <div>
+                    <dt>Invoice</dt>
+                    <dd class="text-break">@Model.InvoiceId</dd>
+                </div>
+                @if (!string.IsNullOrEmpty(Model.OrderId))
+                {
+                    <div>
+                        <dt>Order</dt>
+                        <dd class="text-break">@Model.OrderId</dd>
+                    </div>
+                }
+            </dl>
+            <form method="post" asp-action="ReportMerchant" asp-route-invoiceId="@Model.InvoiceId" class="mt-4">
+                <input asp-for="InvoiceId" type="hidden" />
+                <div class="form-group">
+                    <label asp-for="Reason" class="form-label"></label>
+                    <select asp-for="Reason" class="form-select">
+                        <option>Suspected scam</option>
+                        <option>Impersonation</option>
+                        <option>Fraudulent listing</option>
+                        <option>Abusive content</option>
+                        <option>Other</option>
+                    </select>
+                    <span asp-validation-for="Reason" class="text-danger"></span>
+                </div>
+                <div class="form-group">
+                    <label asp-for="Details" class="form-label"></label>
+                    <textarea asp-for="Details" class="form-control" rows="5" placeholder="Describe why this merchant or invoice looks suspicious."></textarea>
+                    <span asp-validation-for="Details" class="text-danger"></span>
+                </div>
+                <div class="form-group">
+                    <label asp-for="Contact" class="form-label"></label>
+                    <input asp-for="Contact" class="form-control" placeholder="Email or other contact, optional" />
+                    <span asp-validation-for="Contact" class="text-danger"></span>
+                </div>
+                <button type="submit" class="btn btn-primary rounded-pill w-100">Submit report</button>
+            </form>
+        </section>
+    </main>
+</div>
+</body>
+</html>

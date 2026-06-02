@@ -36,6 +36,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "submodules", "submodules", 
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "btcpayserver", "btcpayserver", "{62D3B876-442A-4F32-9377-95C9C063FEAF}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BTCPayServer.Ndeet.Plugins.AmbassadorToolbox", "Plugins\BTCPayServer.Ndeet.Plugins.AmbassadorToolbox\BTCPayServer.Ndeet.Plugins.AmbassadorToolbox.csproj", "{80CE0AAE-C121-4C0F-A2EA-CF26AC1F9214}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Altcoins-Debug|Any CPU = Altcoins-Debug|Any CPU
@@ -292,7 +294,7 @@ Global
 		{C6E671F6-5417-4F2F-A5A2-0A7D307BA1F7}.Release|x64.Build.0 = Release|Any CPU
 		{C6E671F6-5417-4F2F-A5A2-0A7D307BA1F7}.Release|x86.ActiveCfg = Release|Any CPU
 		{C6E671F6-5417-4F2F-A5A2-0A7D307BA1F7}.Release|x86.Build.0 = Release|Any CPU
-{EEED5745-8430-44FD-B88E-B927B3617B50}.Altcoins-Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EEED5745-8430-44FD-B88E-B927B3617B50}.Altcoins-Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{EEED5745-8430-44FD-B88E-B927B3617B50}.Altcoins-Debug|Any CPU.Build.0 = Debug|Any CPU
 		{EEED5745-8430-44FD-B88E-B927B3617B50}.Altcoins-Debug|x64.ActiveCfg = Debug|Any CPU
 		{EEED5745-8430-44FD-B88E-B927B3617B50}.Altcoins-Debug|x64.Build.0 = Debug|Any CPU
@@ -316,6 +318,30 @@ Global
 		{EEED5745-8430-44FD-B88E-B927B3617B50}.Release|x64.Build.0 = Release|Any CPU
 		{EEED5745-8430-44FD-B88E-B927B3617B50}.Release|x86.ActiveCfg = Release|Any CPU
 		{EEED5745-8430-44FD-B88E-B927B3617B50}.Release|x86.Build.0 = Release|Any CPU
+		{80CE0AAE-C121-4C0F-A2EA-CF26AC1F9214}.Altcoins-Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{80CE0AAE-C121-4C0F-A2EA-CF26AC1F9214}.Altcoins-Debug|Any CPU.Build.0 = Debug|Any CPU
+		{80CE0AAE-C121-4C0F-A2EA-CF26AC1F9214}.Altcoins-Debug|x64.ActiveCfg = Debug|Any CPU
+		{80CE0AAE-C121-4C0F-A2EA-CF26AC1F9214}.Altcoins-Debug|x64.Build.0 = Debug|Any CPU
+		{80CE0AAE-C121-4C0F-A2EA-CF26AC1F9214}.Altcoins-Debug|x86.ActiveCfg = Debug|Any CPU
+		{80CE0AAE-C121-4C0F-A2EA-CF26AC1F9214}.Altcoins-Debug|x86.Build.0 = Debug|Any CPU
+		{80CE0AAE-C121-4C0F-A2EA-CF26AC1F9214}.Altcoins-Release|Any CPU.ActiveCfg = Debug|Any CPU
+		{80CE0AAE-C121-4C0F-A2EA-CF26AC1F9214}.Altcoins-Release|Any CPU.Build.0 = Debug|Any CPU
+		{80CE0AAE-C121-4C0F-A2EA-CF26AC1F9214}.Altcoins-Release|x64.ActiveCfg = Debug|Any CPU
+		{80CE0AAE-C121-4C0F-A2EA-CF26AC1F9214}.Altcoins-Release|x64.Build.0 = Debug|Any CPU
+		{80CE0AAE-C121-4C0F-A2EA-CF26AC1F9214}.Altcoins-Release|x86.ActiveCfg = Debug|Any CPU
+		{80CE0AAE-C121-4C0F-A2EA-CF26AC1F9214}.Altcoins-Release|x86.Build.0 = Debug|Any CPU
+		{80CE0AAE-C121-4C0F-A2EA-CF26AC1F9214}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{80CE0AAE-C121-4C0F-A2EA-CF26AC1F9214}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{80CE0AAE-C121-4C0F-A2EA-CF26AC1F9214}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{80CE0AAE-C121-4C0F-A2EA-CF26AC1F9214}.Debug|x64.Build.0 = Debug|Any CPU
+		{80CE0AAE-C121-4C0F-A2EA-CF26AC1F9214}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{80CE0AAE-C121-4C0F-A2EA-CF26AC1F9214}.Debug|x86.Build.0 = Debug|Any CPU
+		{80CE0AAE-C121-4C0F-A2EA-CF26AC1F9214}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{80CE0AAE-C121-4C0F-A2EA-CF26AC1F9214}.Release|Any CPU.Build.0 = Release|Any CPU
+		{80CE0AAE-C121-4C0F-A2EA-CF26AC1F9214}.Release|x64.ActiveCfg = Release|Any CPU
+		{80CE0AAE-C121-4C0F-A2EA-CF26AC1F9214}.Release|x64.Build.0 = Release|Any CPU
+		{80CE0AAE-C121-4C0F-A2EA-CF26AC1F9214}.Release|x86.ActiveCfg = Release|Any CPU
+		{80CE0AAE-C121-4C0F-A2EA-CF26AC1F9214}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -330,6 +356,7 @@ Global
 		{4146B6DF-7BEE-4BD0-B6B1-77E7630A1B81} = {9E04ECE9-E304-4FF2-9CBC-83256E6C6962}
 		{EEED5745-8430-44FD-B88E-B927B3617B50} = {07D57EEB-2F50-60C4-C011-FE4FA775C9A8}
 		{62D3B876-442A-4F32-9377-95C9C063FEAF} = {B3415621-5EBA-1A55-0B57-0078FEC59DC7}
+		{80CE0AAE-C121-4C0F-A2EA-CF26AC1F9214} = {07D57EEB-2F50-60C4-C011-FE4FA775C9A8}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {45AEBD16-6568-4956-9D05-B33C33712DE3}
