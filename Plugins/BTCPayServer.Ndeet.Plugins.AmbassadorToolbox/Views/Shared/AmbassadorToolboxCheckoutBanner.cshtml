@@ -1,0 +1,152 @@
+@inject SettingsRepository SettingsRepository
+@{
+    var settings = await SettingsRepository.GetSettingAsync<AmbassadorToolboxSettings>(AmbassadorToolboxPlugin.SettingsKey)
+                   ?? new AmbassadorToolboxSettings();
+    var checkoutModel = ViewData.Model as CheckoutModel;
+    var showBanner = settings.EnableSiteBanner;
+    var reportEnabled = settings.EnableMerchantReports && checkoutModel is not null && !string.IsNullOrEmpty(checkoutModel.InvoiceId);
+    var enabled = showBanner || reportEnabled;
+    var bannerText = showBanner
+        ? AmbassadorToolboxSettings.NormalizeSiteBannerText(settings.SiteBannerText)
+        : null;
+    var backgroundColor = AmbassadorToolboxSettings.NormalizeHexColor(
+        settings.SiteBannerBackgroundColor,
+        AmbassadorToolboxSettings.DefaultSiteBannerBackgroundColor);
+    var textColor = AmbassadorToolboxSettings.NormalizeHexColor(
+        settings.SiteBannerTextColor,
+        AmbassadorToolboxSettings.DefaultSiteBannerTextColor);
+    var reportUrl = reportEnabled
+        ? Url.Action("ReportMerchant", "AmbassadorToolbox", new { invoiceId = checkoutModel!.InvoiceId })
+        : null;
+    var reportText = string.IsNullOrWhiteSpace(settings.ReportButtonText)
+        ? "Report this merchant"
+        : settings.ReportButtonText.Trim();
+}
+@if (enabled)
+{
+    <script>
+        (function () {
+            const bannerText = @Safe.Json(bannerText);
+            const reportUrl = @Safe.Json(reportUrl);
+            const reportText = @Safe.Json(reportEnabled ? reportText : null);
+            const backgroundColor = @Safe.Json(backgroundColor);
+            const textColor = @Safe.Json(textColor);
+            let basePaddingTop = null;
+            let resizeQueued = false;
+
+            const set = function (element, property, value) {
+                element.style.setProperty(property, value, "important");
+            };
+
+            if (bannerText) {
+                const host = document.createElement("div");
+                const message = document.createElement("span");
+                host.setAttribute("role", "alert");
+                message.textContent = bannerText;
+
+                set(message, "color", textColor);
+                set(message, "display", "inline");
+                set(message, "font", "inherit");
+                set(message, "opacity", "1");
+                set(message, "visibility", "visible");
+
+                host.appendChild(message);
+                set(host, "align-items", "center");
+                set(host, "background-color", backgroundColor);
+                set(host, "border", "0");
+                set(host, "box-shadow", "0 2px 14px rgba(0, 0, 0, .22)");
+                set(host, "box-sizing", "border-box");
+                set(host, "clip", "auto");
+                set(host, "clip-path", "none");
+                set(host, "color", textColor);
+                set(host, "display", "flex");
+                set(host, "filter", "none");
+                set(host, "font-size", "1rem");
+                set(host, "font-weight", "800");
+                set(host, "justify-content", "center");
+                set(host, "left", "0");
+                set(host, "letter-spacing", ".01em");
+                set(host, "line-height", "1.35");
+                set(host, "margin", "0");
+                set(host, "max-height", "none");
+                set(host, "min-height", "3.25rem");
+                set(host, "opacity", "1");
+                set(host, "overflow", "visible");
+                set(host, "padding", ".75rem 1rem");
+                set(host, "pointer-events", "auto");
+                set(host, "position", "fixed");
+                set(host, "right", "0");
+                set(host, "text-align", "center");
+                set(host, "text-transform", "none");
+                set(host, "top", "0");
+                set(host, "transform", "none");
+                set(host, "visibility", "visible");
+                set(host, "width", "100%");
+                set(host, "z-index", "2147483647");
+
+                document.body.insertBefore(host, document.body.firstChild);
+
+                const setBodyPadding = function () {
+                    if (basePaddingTop === null) {
+                        basePaddingTop = parseFloat(window.getComputedStyle(document.body).paddingTop) || 0;
+                    }
+                    set(document.body, "padding-top", (basePaddingTop + host.offsetHeight) + "px");
+                };
+
+                setBodyPadding();
+                window.addEventListener("resize", function () {
+                    if (resizeQueued) return;
+                    resizeQueued = true;
+                    window.requestAnimationFrame(function () {
+                        resizeQueued = false;
+                        setBodyPadding();
+                    });
+                });
+            }
+
+            if (reportUrl) {
+                const footer = document.querySelector("#Checkout .store-footer");
+                if (!footer) return;
+
+                const link = document.createElement("a");
+                link.href = reportUrl;
+                link.textContent = reportText;
+
+                set(link, "background", "transparent");
+                set(link, "border", "0");
+                set(link, "box-sizing", "border-box");
+                set(link, "color", "#dc3545");
+                set(link, "display", "inline-flex");
+                set(link, "font", "inherit");
+                set(link, "font-weight", "700");
+                set(link, "line-height", "1.2");
+                set(link, "margin", "0 0 1rem 0");
+                set(link, "opacity", "1");
+                set(link, "padding", "0");
+                set(link, "pointer-events", "auto");
+                set(link, "position", "static");
+                set(link, "text-decoration", "underline");
+                set(link, "transform", "none");
+                set(link, "visibility", "visible");
+
+                const poweredBy = footer.querySelector(".store-powered-by");
+                footer.insertBefore(link, poweredBy || footer.firstChild);
+            }
+        })();
+    </script>
+    <noscript>
+        @if (bannerText is not null)
+        {
+            <style>body { padding-top: 3.25rem !important; }</style>
+            <div role="alert" style="position:fixed !important;top:0 !important;left:0 !important;right:0 !important;z-index:2147483647 !important;display:flex !important;align-items:center !important;justify-content:center !important;min-height:3.25rem !important;padding:.75rem 1rem !important;background-color:@backgroundColor !important;color:@textColor !important;font-weight:800 !important;line-height:1.35 !important;text-align:center !important;box-shadow:0 2px 14px rgba(0,0,0,.22) !important;">
+                <span style="display:inline !important;color:@textColor !important;opacity:1 !important;visibility:visible !important;">@bannerText</span>
+            </div>
+        }
+        @if (reportUrl is not null)
+        {
+            <p style="margin:1rem 0 !important;text-align:center !important;">
+                <a href="@reportUrl" style="display:inline-flex !important;padding:0 !important;border:0 !important;background:transparent !important;color:#dc3545 !important;font-weight:700 !important;text-decoration:underline !important;pointer-events:auto !important;opacity:1 !important;visibility:visible !important;">@reportText</a>
+            </p>
+        }
+    </noscript>
+}

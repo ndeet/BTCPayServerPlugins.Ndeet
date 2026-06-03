@@ -11,6 +11,7 @@
     <link href="~/checkout/checkout.css" asp-append-version="true" rel="stylesheet" />
 </head>
 <body class="min-vh-100">
+<partial name="AmbassadorToolboxCheckoutBanner" />
 <div class="public-page-wrap">
     <main class="tile">
         <section>
@@ -55,6 +56,10 @@
                     <label asp-for="Contact" class="form-label"></label>
                     <input asp-for="Contact" class="form-control" placeholder="Email or other contact, optional" />
                     <span asp-validation-for="Contact" class="text-danger"></span>
+                </div>
+                <div aria-hidden="true" style="position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden;">
+                    <label asp-for="Website">Website</label>
+                    <input asp-for="Website" tabindex="-1" autocomplete="off" maxlength="200" />
                 </div>
                 <button type="submit" class="btn btn-primary rounded-pill w-100">Submit report</button>
             </form>

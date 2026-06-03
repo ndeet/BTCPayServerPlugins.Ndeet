@@ -8,6 +8,7 @@ using BTCPayServer.Client;
 using BTCPayServer.Ndeet.Plugins.AmbassadorToolbox.ViewModels;
 using BTCPayServer.Services;
 using BTCPayServer.Services.Invoices;
+using BTCPayServer.Services.Notifications;
 using BTCPayServer.Services.Stores;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -20,7 +21,8 @@ namespace BTCPayServer.Ndeet.Plugins.AmbassadorToolbox;
 public class AmbassadorToolboxController(
     SettingsRepository settingsRepository,
     InvoiceRepository invoiceRepository,
-    StoreRepository storeRepository) : Controller
+    StoreRepository storeRepository,
+    NotificationSender notificationSender) : Controller
 {
     [HttpGet("~/server/ambassador-toolbox")]
     [Authorize(Policy = Policies.CanModifyServerSettings, AuthenticationSchemes = AuthenticationSchemes.Cookie)]
@@ -43,6 +45,15 @@ public class AmbassadorToolboxController(
                 .ToList();
             return View(model);
         }
+
+        settings.EnableSiteBanner = model.EnableSiteBanner;
+        settings.SiteBannerText = AmbassadorToolboxSettings.NormalizeSiteBannerText(model.SiteBannerText);
+        settings.SiteBannerBackgroundColor = AmbassadorToolboxSettings.NormalizeHexColor(
+            model.SiteBannerBackgroundColor,
+            AmbassadorToolboxSettings.DefaultSiteBannerBackgroundColor);
+        settings.SiteBannerTextColor = AmbassadorToolboxSettings.NormalizeHexColor(
+            model.SiteBannerTextColor,
+            AmbassadorToolboxSettings.DefaultSiteBannerTextColor);
 
         settings.EnableMerchantReports = model.EnableMerchantReports;
         settings.ReportButtonText = string.IsNullOrWhiteSpace(model.ReportButtonText)
@@ -114,11 +125,18 @@ public class AmbassadorToolboxController(
         model.StoreName = storeName;
         model.OrderId = invoice.Metadata?.OrderId;
 
+        if (!string.IsNullOrWhiteSpace(model.Website))
+            return View("ReportSubmitted", new MerchantReportSubmittedViewModel
+            {
+                StoreName = storeName,
+                InvoiceId = invoice.Id
+            });
+
         if (!ModelState.IsValid)
             return View(model);
 
         var settings = await GetSettings();
-        settings.Reports.Add(new MerchantReport
+        var report = new MerchantReport
         {
             Id = Encoders.Base58.EncodeData(RandomUtils.GetBytes(12)),
             CreatedAt = DateTimeOffset.UtcNow,
@@ -131,8 +149,10 @@ public class AmbassadorToolboxController(
             Contact = string.IsNullOrWhiteSpace(model.Contact) ? null : model.Contact.Trim(),
             IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
             UserAgent = Request.Headers.UserAgent.ToString()
-        });
+        };
+        settings.Reports.Add(report);
         await SaveSettings(settings);
+        await notificationSender.SendNotification(new AdminScope(), new MerchantReportNotification(report));
 
         return View("ReportSubmitted", new MerchantReportSubmittedViewModel
         {
@@ -163,6 +183,13 @@ public class AmbassadorToolboxController(
     {
         var settings = await settingsRepository.GetSettingAsync<AmbassadorToolboxSettings>(AmbassadorToolboxPlugin.SettingsKey)
                        ?? new AmbassadorToolboxSettings();
+        settings.SiteBannerText = AmbassadorToolboxSettings.NormalizeSiteBannerText(settings.SiteBannerText);
+        settings.SiteBannerBackgroundColor = AmbassadorToolboxSettings.NormalizeHexColor(
+            settings.SiteBannerBackgroundColor,
+            AmbassadorToolboxSettings.DefaultSiteBannerBackgroundColor);
+        settings.SiteBannerTextColor = AmbassadorToolboxSettings.NormalizeHexColor(
+            settings.SiteBannerTextColor,
+            AmbassadorToolboxSettings.DefaultSiteBannerTextColor);
         settings.ReportButtonText = string.IsNullOrWhiteSpace(settings.ReportButtonText)
             ? "Report this merchant"
             : settings.ReportButtonText;
@@ -179,6 +206,10 @@ public class AmbassadorToolboxController(
     {
         return new AmbassadorToolboxIndexViewModel
         {
+            EnableSiteBanner = settings.EnableSiteBanner,
+            SiteBannerText = settings.SiteBannerText,
+            SiteBannerBackgroundColor = settings.SiteBannerBackgroundColor,
+            SiteBannerTextColor = settings.SiteBannerTextColor,
             EnableMerchantReports = settings.EnableMerchantReports,
             ReportButtonText = settings.ReportButtonText,
             Reports = settings.Reports

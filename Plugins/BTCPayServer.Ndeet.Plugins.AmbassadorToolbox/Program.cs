@@ -1,5 +1,6 @@
 using BTCPayServer.Abstractions.Contracts;
 using BTCPayServer.Abstractions.Models;
+using BTCPayServer.Services.Notifications;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace BTCPayServer.Ndeet.Plugins.AmbassadorToolbox;
@@ -19,8 +20,11 @@ public class AmbassadorToolboxPlugin : BaseBTCPayServerPlugin
 
     public override void Execute(IServiceCollection applicationBuilder)
     {
-        applicationBuilder.AddUIExtension("server-nav", "AmbassadorToolboxNav");
-        applicationBuilder.AddUIExtension("checkout-end", "AmbassadorToolboxCheckout");
+        applicationBuilder.AddUIExtension("server-nav", "/Views/Shared/AmbassadorToolboxNav.cshtml");
+        applicationBuilder.AddUIExtension("layout-banner", "/Views/Shared/AmbassadorToolboxSiteBanner.cshtml");
+        applicationBuilder.AddUIExtension("checkout-end", "/Views/Shared/AmbassadorToolboxCheckoutBanner.cshtml");
+        applicationBuilder.AddUIExtension("checkout-noscript-end", "/Views/Shared/AmbassadorToolboxCheckoutBanner.cshtml");
+        applicationBuilder.AddSingleton<INotificationHandler, MerchantReportNotification.Handler>();
         base.Execute(applicationBuilder);
     }
 }
