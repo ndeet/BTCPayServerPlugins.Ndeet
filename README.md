@@ -8,10 +8,10 @@ Forked from great multi plugin repository from RockstarDev: https://github.com/r
 
 ## Plugins
 
-| Plugin | Description                                                                                                                                                |
-|--------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Tipcards** | Create sets of tipcards with QR codes backed by Lightning LNURL-withdraw. Print them, hand them out, people scan and claim sats. Shout out to tipcards.io  |
-| **Ambassador Toolbox** | Tools for BTCPay ambassadors hosting merchants, starting with checkout merchant reports for scam and abuse review. |
+| Plugin | Description | Documentation |
+|--------|-------------|---------------|
+| **Tipcards** | Create sets of tipcards with QR codes backed by Lightning LNURL-withdraw. Print them, hand them out, people scan and claim sats. Shout out to tipcards.io | [Plugin README](Plugins/BTCPayServer.Ndeet.Plugins.Tipcards/README.md) |
+| **Ambassador Toolbox** | Tools for BTCPay ambassadors hosting merchants, starting with checkout merchant reports for scam and abuse review. | [Plugin README](Plugins/BTCPayServer.Ndeet.Plugins.AmbassadorToolbox/README.md) |
 
 ## Getting Started
 
