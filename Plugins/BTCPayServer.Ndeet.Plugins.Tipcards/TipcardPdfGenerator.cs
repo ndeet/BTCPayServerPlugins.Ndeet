@@ -12,6 +12,24 @@ namespace BTCPayServer.Ndeet.Plugins.Tipcards;
 
 public static class TipcardPdfGenerator
 {
+    private static readonly XPoint[] LightningIconPoints =
+    [
+        new(17.57, 10.7),
+        new(17.07, 10.36),
+        new(12.77, 10.36),
+        new(13.27, 6.6),
+        new(12.94, 6.05),
+        new(12.28, 6.22),
+        new(6.83, 12.76),
+        new(6.78, 13.36),
+        new(7.27, 13.64),
+        new(11.57, 13.64),
+        new(11.08, 17.4),
+        new(11.41, 17.95),
+        new(12.07, 17.78),
+        new(17.52, 11.24)
+    ];
+
     static TipcardPdfGenerator()
     {
         GlobalFontSettings.FontResolver ??= new FailsafeFontResolver();
@@ -112,15 +130,21 @@ public static class TipcardPdfGenerator
 
             var bgColor = req.QrLogo == QrLogoType.Bitcoin
                 ? XColor.FromArgb(0xF7, 0x93, 0x1A)
-                : XColor.FromArgb(0x7B, 0x1A, 0xF7);
-            string symbol = req.QrLogo == QrLogoType.Bitcoin ? "B" : "L";
+                : XColor.FromArgb(0xF7, 0x93, 0x1A);
 
             gfx.DrawEllipse(XBrushes.White, cx - oR - 1, cy - oR - 1, oSize + 2, oSize + 2);
             gfx.DrawEllipse(new XSolidBrush(bgColor), cx - oR, cy - oR, oSize, oSize);
 
-            var logoFont = new XFont("Helvetica", oSize * 0.55, XFontStyleEx.Bold);
-            var logoRect = new XRect(cx - oR, cy - oR, oSize, oSize);
-            gfx.DrawString(symbol, logoFont, XBrushes.White, logoRect, XStringFormats.Center);
+            if (req.QrLogo == QrLogoType.Bitcoin)
+            {
+                var logoFont = new XFont("Helvetica", oSize * 0.55, XFontStyleEx.Bold);
+                var logoRect = new XRect(cx - oR, cy - oR, oSize, oSize);
+                gfx.DrawString("B", logoFont, XBrushes.White, logoRect, XStringFormats.Center);
+            }
+            else
+            {
+                DrawLightningIcon(gfx, cx - oR, cy - oR, oSize);
+            }
         }
 
         // Sats below QR
@@ -159,6 +183,21 @@ public static class TipcardPdfGenerator
             gfx.DrawString(req.StoreName, sFont, new XSolidBrush(XColor.FromArgb(153, 153, 153)),
                 new XPoint(tcX, storeY));
         }
+    }
+
+    private static void DrawLightningIcon(XGraphics gfx, double x, double y, double size)
+    {
+        var points = new XPoint[LightningIconPoints.Length];
+        for (var i = 0; i < LightningIconPoints.Length; i++)
+        {
+            points[i] = new XPoint(
+                x + LightningIconPoints[i].X / 24.0 * size,
+                y + LightningIconPoints[i].Y / 24.0 * size);
+        }
+
+        var path = new XGraphicsPath();
+        path.AddPolygon(points);
+        gfx.DrawPath(XBrushes.White, path);
     }
 
     private static double EstimateTextHeight(XGraphics gfx, string text, XFont font, double maxWidth)

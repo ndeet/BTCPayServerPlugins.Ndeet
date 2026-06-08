@@ -62,8 +62,8 @@
                         <td>@set.ClaimedCards / @set.TotalCards</td>
                         <td>@set.CreatedDate.ToString("yyyy-MM-dd")</td>
                         <td class="text-end">
-                            <a asp-action="ViewSet" asp-controller="Tipcards" asp-route-storeId="@storeId" asp-route-setId="@set.Id">
-                                View
+                            <a asp-action="EditSet" asp-controller="Tipcards" asp-route-storeId="@storeId" asp-route-setId="@set.Id">
+                                Edit
                             </a>
                             <span> - </span>
                             <a asp-action="PrintSet" asp-controller="Tipcards" asp-route-storeId="@storeId" asp-route-setId="@set.Id">
