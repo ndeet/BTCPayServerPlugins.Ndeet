@@ -13,24 +13,8 @@
 }
 @if (enabled)
 {
-    <style>
-        .ambassador-toolbox-site-banner {
-            position: sticky;
-            top: 0;
-            z-index: 1030;
-            width: 100%;
-            padding: .75rem 1rem;
-            font-weight: 700;
-            line-height: 1.35;
-            text-align: center;
-            letter-spacing: .01em;
-            box-shadow: 0 2px 12px rgba(0, 0, 0, .18);
-        }
-        @@media print {
-            .ambassador-toolbox-site-banner { display: none !important; }
-        }
-    </style>
-    <div class="ambassador-toolbox-site-banner"
+    <div class="ambassador-toolbox-site-banner alert alert-danger mb-0 rounded-0 border-0 text-center fw-bold w-100"
+         data-ambassador-toolbox-site-banner="true"
          role="alert"
          style="background-color:@backgroundColor;color:@textColor;">
         @bannerText

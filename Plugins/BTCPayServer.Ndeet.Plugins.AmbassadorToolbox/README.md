@@ -52,3 +52,29 @@ You can find the settings under Server Settings > Ambassador Toolbox.
 - The plugin collects reports for operator review; it does not enforce merchant takedowns or automate abuse decisions.
 - The public report form is available only when merchant reports are enabled and the invoice exists.
 - The warning banner appears only while the plugin is installed and enabled.
+
+## Screenshots
+
+### Site-wide backend banner
+
+The banner is shown across the authenticated BTCPay merchant and server UI so operators can make demo, testing, or hosted-platform notices visible before users interact with stores.
+
+![Site-wide warning banner in the authenticated BTCPay dashboard](docs/screenshots/backend-site-banner.png)
+
+### Login page banner
+
+The same warning can be shown on unauthenticated pages such as login and registration.
+
+![Warning banner on the BTCPay login page](docs/screenshots/login-site-banner.png)
+
+### Checkout banner and report link
+
+Checkout pages can show the operator warning banner and a public report link for customers who need to flag a suspicious merchant or invoice.
+
+![Checkout page with warning banner and report this merchant link](docs/screenshots/checkout-report-link.png)
+
+### Merchant report form
+
+The public report form captures the merchant, invoice, report reason, details, and optional contact information for administrator review.
+
+![Public merchant report form for suspicious merchants or invoices](docs/screenshots/merchant-report-form.png)

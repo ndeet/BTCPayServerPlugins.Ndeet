@@ -1,6 +1,7 @@
 using BTCPayServer.Abstractions.Contracts;
 using BTCPayServer.Abstractions.Models;
 using BTCPayServer.Services.Notifications;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace BTCPayServer.Ndeet.Plugins.AmbassadorToolbox;
@@ -24,6 +25,9 @@ public class AmbassadorToolboxPlugin : BaseBTCPayServerPlugin
         applicationBuilder.AddUIExtension("layout-banner", "/Views/Shared/AmbassadorToolboxSiteBanner.cshtml");
         applicationBuilder.AddUIExtension("checkout-end", "/Views/Shared/AmbassadorToolboxCheckoutBanner.cshtml");
         applicationBuilder.AddUIExtension("checkout-noscript-end", "/Views/Shared/AmbassadorToolboxCheckoutBanner.cshtml");
+        applicationBuilder.AddScoped<AmbassadorToolboxBannerFilter>();
+        applicationBuilder.Configure<MvcOptions>(options =>
+            options.Filters.AddService<AmbassadorToolboxBannerFilter>());
         applicationBuilder.AddSingleton<INotificationHandler, MerchantReportNotification.Handler>();
         base.Execute(applicationBuilder);
     }
