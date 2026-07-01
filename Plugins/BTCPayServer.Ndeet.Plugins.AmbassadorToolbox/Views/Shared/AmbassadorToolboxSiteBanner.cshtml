@@ -13,10 +13,110 @@
 }
 @if (enabled)
 {
-    <div class="ambassador-toolbox-site-banner alert alert-danger mb-0 rounded-0 border-0 text-center fw-bold w-100"
+    <style>
+        :root {
+            --ambassador-toolbox-site-banner-height: 0px;
+            --ambassador-toolbox-site-banner-gap: calc(var(--btcpay-space-s) + 5px);
+        }
+
+        #globalNav {
+            align-items: stretch;
+            flex-wrap: wrap;
+            row-gap: var(--ambassador-toolbox-site-banner-gap);
+        }
+
+        #globalNav > .ambassador-toolbox-site-banner {
+            order: -100;
+            flex: 0 0 100%;
+            min-width: 0;
+            margin: 0;
+        }
+
+        @@media (max-width: 991px) {
+            #mainMenu {
+                height: calc(var(--mobile-header-height) + var(--ambassador-toolbox-site-banner-height) + var(--ambassador-toolbox-site-banner-gap));
+            }
+
+            #mainMenuHead {
+                position: relative;
+                padding-top: calc(var(--ambassador-toolbox-site-banner-gap) + var(--ambassador-toolbox-site-banner-height));
+            }
+
+            #globalNav {
+                position: static;
+                align-items: center;
+                flex-wrap: nowrap;
+                row-gap: 0;
+            }
+
+            #globalNav > .ambassador-toolbox-site-banner {
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                z-index: 1;
+            }
+
+            #globalNav.globalSearch-mobile-open .globalSearch-shell {
+                top: calc(var(--ambassador-toolbox-site-banner-height) + var(--ambassador-toolbox-site-banner-gap));
+                height: calc(100vh - var(--ambassador-toolbox-site-banner-height) - var(--ambassador-toolbox-site-banner-gap));
+                height: calc(100dvh - var(--ambassador-toolbox-site-banner-height) - var(--ambassador-toolbox-site-banner-gap));
+            }
+
+            #mainNav {
+                top: calc(var(--mobile-header-height) + var(--ambassador-toolbox-site-banner-height) + var(--ambassador-toolbox-site-banner-gap));
+                height: calc(100vh - var(--mobile-header-height) - var(--ambassador-toolbox-site-banner-height) - var(--ambassador-toolbox-site-banner-gap));
+                height: calc(100dvh - var(--mobile-header-height) - var(--ambassador-toolbox-site-banner-height) - var(--ambassador-toolbox-site-banner-gap));
+                padding-bottom: calc(var(--mobile-header-height) + var(--ambassador-toolbox-site-banner-height) + var(--ambassador-toolbox-site-banner-gap));
+            }
+
+            #mainContent > section {
+                padding-top: calc(var(--content-padding-top) + var(--ambassador-toolbox-site-banner-height) + var(--ambassador-toolbox-site-banner-gap));
+            }
+        }
+
+        .content-wrapper > .ambassador-toolbox-site-banner {
+            margin-bottom: var(--btcpay-space-l);
+        }
+
+        @@media (min-width: 992px) {
+            #globalNav {
+                min-height: calc(var(--global-nav-height) + var(--ambassador-toolbox-site-banner-height) + var(--ambassador-toolbox-site-banner-gap));
+            }
+
+            #globalNav > .ambassador-toolbox-site-banner {
+                flex-basis: calc(100% + (2 * var(--content-padding-horizontal)));
+                margin: calc(var(--btcpay-space-s) * -1) calc(var(--content-padding-horizontal) * -1) 0;
+            }
+
+            #mainContent > section {
+                padding-top: calc(var(--content-padding-top) + var(--ambassador-toolbox-site-banner-height) + var(--ambassador-toolbox-site-banner-gap));
+            }
+        }
+    </style>
+    <div class="ambassador-toolbox-site-banner alert alert-danger d-flex flex-wrap align-items-center justify-content-center gap-2 flex-shrink-0 mb-0 rounded-0 border-0 text-center fw-semibold w-100 px-3 py-2"
          data-ambassador-toolbox-site-banner="true"
          role="alert"
          style="background-color:@backgroundColor;color:@textColor;">
-        @bannerText
+        <span class="text-break">@bannerText</span>
     </div>
+    <script>
+        (() => {
+            const banner = document.querySelector('#globalNav > .ambassador-toolbox-site-banner');
+            if (!banner) return;
+
+            const setBannerHeight = () => {
+                document.documentElement.style.setProperty(
+                    '--ambassador-toolbox-site-banner-height',
+                    `${banner.offsetHeight}px`);
+            };
+
+            setBannerHeight();
+            window.addEventListener('resize', setBannerHeight, { passive: true });
+            if (window.ResizeObserver) {
+                banner.ambassadorToolboxResizeObserver = new ResizeObserver(setBannerHeight);
+                banner.ambassadorToolboxResizeObserver.observe(banner);
+            }
+        })();
+    </script>
 }

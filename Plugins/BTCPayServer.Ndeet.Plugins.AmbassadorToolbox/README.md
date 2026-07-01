@@ -6,7 +6,7 @@ The first tools are a configurable warning banner and a public merchant report w
 
 ## Requirements
 
-- BTCPay Server `>= 2.3.4`.
+- BTCPay Server `>= 2.4.0`.
 - Server administrator access.
 - Permission to modify server settings.
 

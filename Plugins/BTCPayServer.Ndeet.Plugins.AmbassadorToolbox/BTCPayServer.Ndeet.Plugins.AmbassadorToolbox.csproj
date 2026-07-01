@@ -8,7 +8,7 @@
     <PropertyGroup>
         <Product>Ambassador Toolbox</Product>
         <Description>Tools for BTCPay Server ambassadors managing hosted merchants.</Description>
-        <Version>1.0.3</Version>
+        <Version>1.0.4</Version>
     </PropertyGroup>
 
     <PropertyGroup>
