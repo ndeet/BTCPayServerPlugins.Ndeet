@@ -152,7 +152,7 @@ public static class TipcardPdfGenerator
         var satsRect = new XRect(ix, iy + qrSize + Mm(1), qrSize, Mm(5));
         gfx.DrawString($"{card.Sats:N0} sats", satsFont, XBrushes.Black, satsRect, XStringFormats.TopCenter);
 
-        // Right column: headline, card text, store name
+        // Right column: headline and card text
         double ty = iy;
 
         if (!string.IsNullOrEmpty(req.CardHeadline))
@@ -176,13 +176,6 @@ public static class TipcardPdfGenerator
             }
         }
 
-        if (!string.IsNullOrEmpty(req.StoreName))
-        {
-            var sFont = new XFont("Helvetica", Mm(2.2), XFontStyleEx.Regular);
-            double storeY = Math.Max(ty + sFont.Height, iy + ih - Mm(1));
-            gfx.DrawString(req.StoreName, sFont, new XSolidBrush(XColor.FromArgb(153, 153, 153)),
-                new XPoint(tcX, storeY));
-        }
     }
 
     private static void DrawLightningIcon(XGraphics gfx, double x, double y, double size)
@@ -254,7 +247,6 @@ public class TipcardPdfRequest
     public string SetName { get; set; }
     public string CardHeadline { get; set; }
     public string CardText { get; set; }
-    public string StoreName { get; set; }
     public QrLogoType QrLogo { get; set; }
     public List<TipcardPdfItem> Cards { get; set; } = new();
 }

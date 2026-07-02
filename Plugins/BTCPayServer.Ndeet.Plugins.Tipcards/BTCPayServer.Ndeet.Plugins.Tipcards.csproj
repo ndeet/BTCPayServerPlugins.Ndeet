@@ -9,7 +9,7 @@
     <PropertyGroup>
         <Product>Tipcards</Product>
         <Description>Create sets of tipcards with QR codes that people can scan to receive sats via Lightning.</Description>
-        <Version>1.0.2</Version>
+        <Version>1.0.3</Version>
     </PropertyGroup>
     <!-- Plugin development properties -->
     <PropertyGroup>

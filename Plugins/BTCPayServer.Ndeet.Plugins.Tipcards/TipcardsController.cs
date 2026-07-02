@@ -24,6 +24,7 @@ using Microsoft.EntityFrameworkCore;
 using NBitcoin;
 using NBitcoin.DataEncoders;
 using Newtonsoft.Json;
+using PayoutState = BTCPayServer.Client.Models.PayoutState;
 
 namespace BTCPayServer.Ndeet.Plugins.Tipcards;
 
@@ -175,7 +176,6 @@ public class TipcardsController : Controller
             return NotFound();
 
         await using var ctx = _dbContextFactory.CreateContext();
-        var now = DateTimeOffset.UtcNow;
 
         var vm = new TipcardSetDetailViewModel
         {
@@ -197,8 +197,7 @@ public class TipcardsController : Controller
 
             if (pp == null) continue;
 
-            var progress = _pullPaymentHostedService.CalculatePullPaymentProgress(pp, now);
-            var isClaimed = progress.CompletedPercent > 0 || progress.AwaitingPercent > 0;
+            var isClaimed = IsPullPaymentClaimed(pp);
 
             if (isClaimed)
             {
@@ -272,8 +271,6 @@ public class TipcardsController : Controller
         if (satsChanged || countChanged)
         {
             await using var ctx = _dbContextFactory.CreateContext();
-            var now = DateTimeOffset.UtcNow;
-
             var claimedIds = new List<string>();
             var unclaimedIds = new List<string>();
 
@@ -284,8 +281,7 @@ public class TipcardsController : Controller
                     .FirstOrDefaultAsync(p => p.Id == ppId);
                 if (pp == null) continue;
 
-                var progress = _pullPaymentHostedService.CalculatePullPaymentProgress(pp, now);
-                if (progress.CompletedPercent > 0 || progress.AwaitingPercent > 0)
+                if (IsPullPaymentClaimed(pp))
                     claimedIds.Add(ppId);
                 else
                     unclaimedIds.Add(ppId);
@@ -371,11 +367,9 @@ public class TipcardsController : Controller
         if (!blob.Name.StartsWith("Tipcard"))
             return NotFound();
 
-        var now = DateTimeOffset.UtcNow;
         var store = await _storeRepository.FindStore(pp.StoreId);
         var storeBlob = store.GetStoreBlob();
-        var progress = _pullPaymentHostedService.CalculatePullPaymentProgress(pp, now);
-        var isClaimed = progress.CompletedPercent > 0 || progress.AwaitingPercent > 0;
+        var isClaimed = IsPullPaymentClaimed(pp);
         var supportsLnurl = _pullPaymentHostedService.SupportsLNURL(pp, blob);
 
         var settings = await _storeRepository.GetSettingAsync<TipcardsStoreSettings>(pp.StoreId, SettingsKey)
@@ -436,7 +430,6 @@ public class TipcardsController : Controller
         var branding = await StoreBrandingViewModel.CreateAsync(Request, _uriResolver, storeBlob);
 
         await using var ctx = _dbContextFactory.CreateContext();
-        var now = DateTimeOffset.UtcNow;
 
         var vm = new PrintTipcardSetViewModel
         {
@@ -444,7 +437,6 @@ public class TipcardsController : Controller
             SatsPerCard = set.SatsPerCard,
             CardHeadline = set.CardHeadline,
             CardText = set.CardText,
-            StoreName = store.StoreName,
             LogoUrl = branding.LogoUrl,
             QrLogo = set.QrLogo
         };
@@ -457,8 +449,7 @@ public class TipcardsController : Controller
 
             if (pp == null) continue;
 
-            var progress = _pullPaymentHostedService.CalculatePullPaymentProgress(pp, now);
-            var isClaimed = progress.CompletedPercent > 0 || progress.AwaitingPercent > 0;
+            var isClaimed = IsPullPaymentClaimed(pp);
 
             vm.Cards.Add(new PrintTipcardItem
             {
@@ -487,11 +478,7 @@ public class TipcardsController : Controller
         if (set == null)
             return NotFound();
 
-        var store = await _storeRepository.FindStore(storeId);
-
         await using var ctx = _dbContextFactory.CreateContext();
-        var now = DateTimeOffset.UtcNow;
-
         var (pageW, pageH) = paper switch
         {
             "A3" => (297.0, 420.0),
@@ -509,7 +496,6 @@ public class TipcardsController : Controller
             SetName = set.Name,
             CardHeadline = set.CardHeadline,
             CardText = set.CardText,
-            StoreName = store.StoreName,
             QrLogo = set.QrLogo
         };
 
@@ -520,8 +506,7 @@ public class TipcardsController : Controller
                 .FirstOrDefaultAsync(p => p.Id == ppId);
             if (pp == null) continue;
 
-            var progress = _pullPaymentHostedService.CalculatePullPaymentProgress(pp, now);
-            if (progress.CompletedPercent > 0 || progress.AwaitingPercent > 0)
+            if (IsPullPaymentClaimed(pp))
                 continue;
 
             pdfRequest.Cards.Add(new TipcardPdfItem
@@ -696,6 +681,20 @@ public class TipcardsController : Controller
         return settings.Sets.FirstOrDefault(s => s.PullPaymentIds.Contains(pullPaymentId));
     }
 
+    private static bool IsPullPaymentClaimed(PullPaymentData pp)
+    {
+        var completed = pp.Payouts
+            .Where(p => p.State is PayoutState.Completed or PayoutState.InProgress)
+            .Sum(p => p.OriginalAmount);
+        if (completed > 0)
+            return true;
+
+        var awaiting = pp.Payouts
+            .Where(p => p.State is PayoutState.AwaitingPayment or PayoutState.AwaitingApproval)
+            .Sum(p => p.OriginalAmount);
+        return awaiting > 0;
+    }
+
     private async Task<TipcardsStoreSettings> GetSettings()
     {
         var settings = await _storeRepository.GetSettingAsync<TipcardsStoreSettings>(CurrentStore.Id, SettingsKey)
@@ -733,7 +732,6 @@ public class TipcardsController : Controller
         if (!pullPaymentIds.Any()) return 0;
 
         await using var ctx = _dbContextFactory.CreateContext();
-        var now = DateTimeOffset.UtcNow;
         int claimed = 0;
 
         foreach (var ppId in pullPaymentIds)
@@ -744,8 +742,7 @@ public class TipcardsController : Controller
 
             if (pp == null) continue;
 
-            var progress = _pullPaymentHostedService.CalculatePullPaymentProgress(pp, now);
-            if (progress.CompletedPercent > 0 || progress.AwaitingPercent > 0)
+            if (IsPullPaymentClaimed(pp))
                 claimed++;
         }
 

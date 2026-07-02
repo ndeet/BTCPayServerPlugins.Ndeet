@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
-using BTCPayServer.Models;
-using BTCPayServer.Models.WalletViewModels;
 
 namespace BTCPayServer.Ndeet.Plugins.Tipcards.ViewModels;
 
@@ -131,7 +129,6 @@ public class PrintTipcardSetViewModel
     public long SatsPerCard { get; set; }
     public string CardHeadline { get; set; }
     public string CardText { get; set; }
-    public string StoreName { get; set; }
     public string LogoUrl { get; set; }
     public QrLogoType QrLogo { get; set; }
     public List<PrintTipcardItem> Cards { get; set; } = new();

@@ -6,7 +6,7 @@ The plugin is useful for handing out small amounts of sats at meetups, events, w
 
 ## Requirements
 
-- BTCPay Server `>= 2.3.4`.
+- BTCPay Server `>= 2.4.0`.
 - A store with permission to modify store settings.
 - Lightning payouts (`BTC-LN`) enabled for the store before creating tipcard sets.
 
