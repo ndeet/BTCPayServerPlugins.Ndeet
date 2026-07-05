@@ -28,6 +28,7 @@ public class AmbassadorToolboxPlugin : BaseBTCPayServerPlugin
         applicationBuilder.AddScoped<AmbassadorToolboxBannerFilter>();
         applicationBuilder.Configure<MvcOptions>(options =>
             options.Filters.AddService<AmbassadorToolboxBannerFilter>());
+        applicationBuilder.AddSingleton<MerchantReportSubmissionThrottle>();
         applicationBuilder.AddSingleton<INotificationHandler, MerchantReportNotification.Handler>();
         base.Execute(applicationBuilder);
     }

@@ -37,11 +37,14 @@ When merchant reports are enabled:
 1. Checkout pages show a configurable report link.
 2. The link opens a public report form for the current invoice.
 3. The reporter enters a reason, details, and optional contact information.
-4. The report is stored in the plugin settings.
-5. BTCPay sends an admin notification.
-6. Server administrators can review reports from the Ambassador Toolbox page.
+4. The submission is checked against the public report throttle.
+5. The report is stored in the plugin settings.
+6. BTCPay sends an admin notification.
+7. Server administrators can review reports from the Ambassador Toolbox page.
 
 Reports can be resolved, reopened, or deleted from the admin UI.
+
+Public report submissions are limited to one accepted report per minute per source IP address. Throttled submissions return HTTP 429 and do not create admin notifications.
 
 ## Settings
 You can find the settings under Server Settings > Ambassador Toolbox.
@@ -51,6 +54,7 @@ You can find the settings under Server Settings > Ambassador Toolbox.
 - Reports are stored in BTCPay settings, not in a dedicated database table.
 - The plugin collects reports for operator review; it does not enforce merchant takedowns or automate abuse decisions.
 - The public report form is available only when merchant reports are enabled and the invoice exists.
+- The public report throttle is tracked in memory per server process and resets when BTCPay restarts.
 - The warning banner appears only while the plugin is installed and enabled.
 
 ## Screenshots

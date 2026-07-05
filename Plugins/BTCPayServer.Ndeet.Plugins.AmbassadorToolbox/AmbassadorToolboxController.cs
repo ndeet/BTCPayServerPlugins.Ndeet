@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using BTCPayServer.Abstractions.Constants;
@@ -22,7 +23,8 @@ public class AmbassadorToolboxController(
     SettingsRepository settingsRepository,
     InvoiceRepository invoiceRepository,
     StoreRepository storeRepository,
-    NotificationSender notificationSender) : Controller
+    NotificationSender notificationSender,
+    MerchantReportSubmissionThrottle reportSubmissionThrottle) : Controller
 {
     [HttpGet("~/server/ambassador-toolbox")]
     [Authorize(Policy = Policies.CanModifyServerSettings, AuthenticationSchemes = AuthenticationSchemes.Cookie)]
@@ -135,11 +137,19 @@ public class AmbassadorToolboxController(
         if (!ModelState.IsValid)
             return View(model);
 
+        var now = DateTimeOffset.UtcNow;
+        if (!reportSubmissionThrottle.TryConsume(GetReportThrottleKey(), now, out var retryAt))
+        {
+            SetRetryAfterHeader(now, retryAt);
+            ModelState.AddModelError(string.Empty, "Please wait a minute before submitting another report.");
+            return View(model);
+        }
+
         var settings = await GetSettings();
         var report = new MerchantReport
         {
             Id = Encoders.Base58.EncodeData(RandomUtils.GetBytes(12)),
-            CreatedAt = DateTimeOffset.UtcNow,
+            CreatedAt = now,
             InvoiceId = invoice.Id,
             StoreId = invoice.StoreId,
             StoreName = storeName,
@@ -200,6 +210,24 @@ public class AmbassadorToolboxController(
     private Task SaveSettings(AmbassadorToolboxSettings settings)
     {
         return settingsRepository.UpdateSetting(settings, AmbassadorToolboxPlugin.SettingsKey);
+    }
+
+    private string GetReportThrottleKey()
+    {
+        var remoteIpAddress = HttpContext.Connection.RemoteIpAddress;
+        if (remoteIpAddress is null)
+            return "unknown";
+
+        return remoteIpAddress.IsIPv4MappedToIPv6
+            ? remoteIpAddress.MapToIPv4().ToString()
+            : remoteIpAddress.ToString();
+    }
+
+    private void SetRetryAfterHeader(DateTimeOffset now, DateTimeOffset retryAt)
+    {
+        var retryAfterSeconds = Math.Max(1, (int)Math.Ceiling((retryAt - now).TotalSeconds));
+        Response.StatusCode = 429;
+        Response.Headers["Retry-After"] = retryAfterSeconds.ToString(CultureInfo.InvariantCulture);
     }
 
     private static AmbassadorToolboxIndexViewModel ToIndexViewModel(AmbassadorToolboxSettings settings)
