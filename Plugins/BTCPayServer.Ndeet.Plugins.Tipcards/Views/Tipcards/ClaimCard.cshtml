@@ -81,8 +81,7 @@
                         <p class="fiat-amount">&asymp; @Model.FiatAmount.Value.ToString("N2") @Model.FiatCurrency</p>
                     }
                     <p class="text-danger mt-3">
-                        This tipcard cannot be claimed right now. Lightning payouts are not configured on the server.
-                        Please contact the person who gave you this card.
+                        @Model.UnavailableMessage
                     </p>
                 </div>
             </div>

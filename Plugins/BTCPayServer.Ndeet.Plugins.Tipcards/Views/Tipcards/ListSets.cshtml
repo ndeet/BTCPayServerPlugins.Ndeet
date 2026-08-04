@@ -58,7 +58,7 @@
                         </td>
                         <td>@set.TotalCards</td>
                         <td>@set.SatsPerCard.ToString("N0")</td>
-                        <td>@((set.SatsPerCard * set.TotalCards).ToString("N0"))</td>
+                        <td>@set.TotalSats.ToString("N0")</td>
                         <td>@set.ClaimedCards / @set.TotalCards</td>
                         <td>@set.CreatedDate.ToString("yyyy-MM-dd")</td>
                         <td class="text-end">
@@ -72,7 +72,7 @@
                             <span> - </span>
                             <a asp-action="DeleteSet" asp-controller="Tipcards" asp-route-storeId="@storeId" asp-route-setId="@set.Id"
                                data-bs-toggle="modal" data-bs-target="#ConfirmModal"
-                               data-description="This will archive all pull payments in the set &quot;@set.Name&quot;. Are you sure?">
+                               data-description="This will archive activated pull payments and invalidate all cards in &quot;@set.Name&quot;. Are you sure?">
                                 Delete
                             </a>
                         </td>

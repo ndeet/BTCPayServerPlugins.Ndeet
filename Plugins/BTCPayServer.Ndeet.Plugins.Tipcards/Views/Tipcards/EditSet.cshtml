@@ -30,7 +30,7 @@
                     <label asp-for="SatsPerCard" class="form-label" data-required></label>
                     <input asp-for="SatsPerCard" class="form-control" type="number" min="1" max="1000000000" id="satsPerCard" />
                     <span asp-validation-for="SatsPerCard" class="text-danger"></span>
-                    <div class="form-text">Changing this will recreate all unclaimed cards with new QR codes.</div>
+                    <div class="form-text">Changing this resets activated, unclaimed cards. Their existing QR codes stay valid.</div>
                 </div>
                 <div class="form-group flex-fill">
                     <label asp-for="NumberOfCards" class="form-label" data-required></label>

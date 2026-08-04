@@ -14,6 +14,7 @@
     var storeId = ScopeProvider.GetCurrentStoreId();
     ViewData.SetLayoutModel(new LayoutModel(nameof(TipcardsPages.Sets), Model.Name) { ActiveCategory = nameof(TipcardsPages) });
     var totalCards = Model.Cards.Count;
+    var totalSats = Model.Cards.Sum(card => card.Sats);
 }
 
 <style>
@@ -26,6 +27,7 @@
     .tipcard-item { border: 1px solid var(--btcpay-body-border-light, #dee2e6); border-radius: 8px; padding: 0.75rem; text-align: center; position: relative; transition: all 0.2s; }
     .tipcard-item.claimed { opacity: 0.35; filter: blur(1px); }
     .tipcard-item.claimed:hover { opacity: 0.7; filter: none; }
+    .tipcard-item.unavailable { border-color: var(--btcpay-danger, #dc3545); opacity: 0.65; }
     .tipcard-item .card-number { font-size: 0.75rem; color: var(--btcpay-body-text-muted); }
     .tipcard-item .card-sats { font-weight: 700; font-size: 1.1rem; }
     .tipcard-item .card-badge { position: absolute; top: 8px; right: 8px; }
@@ -83,15 +85,23 @@
         <div class="stat-label">Claimed</div>
     </div>
     <div class="stat">
-        <div class="stat-value">@Model.FundedSats.ToString("N0")</div>
-        <div class="stat-sub">(@Model.FundedCount cards)</div>
-        <div class="stat-label">Unclaimed</div>
+        <div class="stat-value">@Model.AvailableSats.ToString("N0")</div>
+        <div class="stat-sub">(@Model.AvailableCount cards)</div>
+        <div class="stat-label">Available</div>
     </div>
     <div class="stat">
-        <div class="stat-value">@((Model.ClaimedSats + Model.FundedSats).ToString("N0"))</div>
+        <div class="stat-value">@totalSats.ToString("N0")</div>
         <div class="stat-sub">(@totalCards cards)</div>
         <div class="stat-label">Total sats</div>
     </div>
+    @if (Model.UnavailableCount > 0)
+    {
+        <div class="stat">
+            <div class="stat-value text-danger">@Model.UnavailableCount</div>
+            <div class="stat-sub">cards</div>
+            <div class="stat-label">Unavailable</div>
+        </div>
+    }
 </div>
 
 @if (!string.IsNullOrEmpty(Model.CardHeadline) || !string.IsNullOrEmpty(Model.CardText))
@@ -115,6 +125,10 @@
             <option value="all">All cards</option>
             <option value="available">Available only</option>
             <option value="claimed">Claimed only</option>
+            @if (Model.UnavailableCount > 0)
+            {
+                <option value="unavailable">Unavailable only</option>
+            }
         </select>
     </div>
     <small class="text-muted">@Model.SatsPerCard.ToString("N0") sats/card &middot; Created @Model.CreatedDate.ToString("yyyy-MM-dd")</small>
@@ -124,12 +138,21 @@
     @for (int i = 0; i < Model.Cards.Count; i++)
     {
         var card = Model.Cards[i];
-        <div class="tipcard-item @(card.IsClaimed ? "claimed" : "")" data-status="@(card.IsClaimed ? "claimed" : "available")">
-            @if (card.IsClaimed)
+        var status = card.IsUnavailable ? "unavailable" : card.IsClaimed ? "claimed" : "available";
+        <div class="tipcard-item @status" data-status="@status">
+            @if (card.IsUnavailable)
+            {
+                <span class="card-badge badge bg-danger">Unavailable</span>
+            }
+            else if (card.IsClaimed)
             {
                 <span class="card-badge badge bg-warning">Claimed</span>
             }
-            <div class="card-number">#@(i + 1)</div>
+            else if (card.IsActivated)
+            {
+                <span class="card-badge badge bg-info">Activated</span>
+            }
+            <div class="card-number">#@card.CardNumber</div>
             <div class="card-sats">@card.Sats.ToString("N0") sats</div>
             <div class="qr-container">
                 <vc:qr-code data="@card.ClaimUrl" size="140"></vc:qr-code>

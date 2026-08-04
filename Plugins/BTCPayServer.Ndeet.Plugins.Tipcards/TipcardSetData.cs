@@ -24,12 +24,19 @@ public class TipcardSetData
     public string Name { get; set; }
     public long SatsPerCard { get; set; }
     public int NumberOfCards { get; set; }
-    public List<string> PullPaymentIds { get; set; } = new();
+    public List<TipcardData> Cards { get; set; } = new();
     public DateTimeOffset CreatedDate { get; set; }
 
     public string CardHeadline { get; set; } = "You received a tip!";
     public string CardText { get; set; } = "Scan this QR code with a Lightning wallet to claim your sats.";
     public QrLogoType QrLogo { get; set; } = QrLogoType.Bitcoin;
+}
+
+public class TipcardData
+{
+    public string ClaimId { get; set; }
+    public int CardNumber { get; set; }
+    public string PullPaymentId { get; set; }
 }
 
 public enum QrLogoType

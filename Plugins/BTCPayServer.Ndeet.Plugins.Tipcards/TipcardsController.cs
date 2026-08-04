@@ -9,18 +9,17 @@ using BTCPayServer.Abstractions.Extensions;
 using BTCPayServer.Abstractions.Models;
 using BTCPayServer.Client;
 using BTCPayServer.Data;
-using BTCPayServer.HostedServices;
 using BTCPayServer.Models;
 using BTCPayServer.Ndeet.Plugins.Tipcards.ViewModels;
-using BTCPayServer.Payouts;
 using BTCPayServer.Rating;
 using BTCPayServer.Services;
 using BTCPayServer.Services.Rates;
 using BTCPayServer.Services.Stores;
+using LNURL;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using NBitcoin;
 using NBitcoin.DataEncoders;
 using Newtonsoft.Json;
@@ -30,12 +29,10 @@ namespace BTCPayServer.Ndeet.Plugins.Tipcards;
 
 public class TipcardsController : Controller
 {
-    private const string SettingsKey = "TipcardsSettings";
-
     private readonly StoreRepository _storeRepository;
-    private readonly PullPaymentHostedService _pullPaymentHostedService;
-    private readonly ApplicationDbContextFactory _dbContextFactory;
-    private readonly PayoutMethodHandlerDictionary _payoutHandlers;
+    private readonly TipcardService _tipcardService;
+    private readonly TipcardStoreLock _storeLock;
+    private readonly UILNURLController _lnurlController;
     private readonly UriResolver _uriResolver;
     private readonly BTCPayNetworkProvider _networkProvider;
     private readonly RateFetcher _rateFetcher;
@@ -43,18 +40,18 @@ public class TipcardsController : Controller
 
     public TipcardsController(
         StoreRepository storeRepository,
-        PullPaymentHostedService pullPaymentHostedService,
-        ApplicationDbContextFactory dbContextFactory,
-        PayoutMethodHandlerDictionary payoutHandlers,
+        TipcardService tipcardService,
+        TipcardStoreLock storeLock,
+        UILNURLController lnurlController,
         UriResolver uriResolver,
         BTCPayNetworkProvider networkProvider,
         RateFetcher rateFetcher,
         DefaultRulesCollection defaultRulesCollection)
     {
         _storeRepository = storeRepository;
-        _pullPaymentHostedService = pullPaymentHostedService;
-        _dbContextFactory = dbContextFactory;
-        _payoutHandlers = payoutHandlers;
+        _tipcardService = tipcardService;
+        _storeLock = storeLock;
+        _lnurlController = lnurlController;
         _uriResolver = uriResolver;
         _networkProvider = networkProvider;
         _rateFetcher = rateFetcher;
@@ -71,21 +68,30 @@ public class TipcardsController : Controller
             return NotFound();
 
         var settings = await GetSettings();
+        var pullPayments = await _tipcardService.GetPullPaymentsAsync(
+            settings.Sets.SelectMany(set => set.Cards));
         var vm = new ListTipcardSetsViewModel
         {
-            LightningConfigured = HasLightningPayouts()
+            LightningConfigured = _tipcardService.HasLightningPayouts(CurrentStore)
         };
 
-        foreach (var set in settings.Sets.OrderByDescending(s => s.CreatedDate))
+        foreach (var set in settings.Sets.OrderByDescending(set => set.CreatedDate))
         {
-            var claimedCount = await CountClaimedCards(set.PullPaymentIds);
+            var claimedCount = set.Cards.Count(card =>
+                TryGetPullPayment(card, pullPayments, out var pullPayment) &&
+                IsPullPaymentClaimed(pullPayment));
+            var totalSats = set.Cards.Sum(card =>
+                TryGetPullPayment(card, pullPayments, out var pullPayment)
+                    ? GetSats(pullPayment)
+                    : set.SatsPerCard);
             vm.Sets.Add(new TipcardSetViewModel
             {
                 Id = set.Id,
                 Name = set.Name,
-                TotalCards = set.NumberOfCards,
+                TotalCards = set.Cards.Count,
                 ClaimedCards = claimedCount,
                 SatsPerCard = set.SatsPerCard,
+                TotalSats = totalSats,
                 CreatedDate = set.CreatedDate
             });
         }
@@ -100,7 +106,7 @@ public class TipcardsController : Controller
         if (CurrentStore == null)
             return NotFound();
 
-        if (!HasLightningPayouts())
+        if (!_tipcardService.HasLightningPayouts(CurrentStore))
         {
             TempData.SetStatusMessageModel(new StatusMessageModel
             {
@@ -123,36 +129,32 @@ public class TipcardsController : Controller
         if (!ModelState.IsValid)
             return View(model);
 
-        if (!HasLightningPayouts())
+        if (!_tipcardService.HasLightningPayouts(CurrentStore))
         {
             TempData[WellKnownTempData.ErrorMessage] = "You must enable Lightning payouts before creating tipcards.";
             return RedirectToAction(nameof(ListSets), new { storeId });
         }
 
         var setId = Encoders.Base58.EncodeData(RandomUtils.GetBytes(8));
-        var amountInBtc = model.SatsPerCard / 100_000_000m;
-        var pullPaymentIds = new List<string>();
+        var cards = TipcardService.CreateCards(model.NumberOfCards);
 
-        for (int i = 0; i < model.NumberOfCards; i++)
+        using (await _storeLock.LockAsync(CurrentStore.Id, HttpContext.RequestAborted))
         {
-            var ppId = await CreateCardPullPayment(setId, model.Name, i + 1, amountInBtc);
-            pullPaymentIds.Add(ppId);
+            var settings = await GetSettings();
+            settings.Sets.Add(new TipcardSetData
+            {
+                Id = setId,
+                Name = model.Name,
+                SatsPerCard = model.SatsPerCard,
+                NumberOfCards = cards.Count,
+                Cards = cards,
+                CreatedDate = DateTimeOffset.UtcNow,
+                CardHeadline = model.CardHeadline,
+                CardText = model.CardText,
+                QrLogo = model.QrLogo
+            });
+            await _tipcardService.SaveSettingsAsync(CurrentStore.Id, settings);
         }
-
-        var settings = await GetSettings();
-        settings.Sets.Add(new TipcardSetData
-        {
-            Id = setId,
-            Name = model.Name,
-            SatsPerCard = model.SatsPerCard,
-            NumberOfCards = model.NumberOfCards,
-            PullPaymentIds = pullPaymentIds,
-            CreatedDate = DateTimeOffset.UtcNow,
-            CardHeadline = model.CardHeadline,
-            CardText = model.CardText,
-            QrLogo = model.QrLogo
-        });
-        await SaveSettings(settings);
 
         TempData.SetStatusMessageModel(new StatusMessageModel
         {
@@ -171,12 +173,11 @@ public class TipcardsController : Controller
             return NotFound();
 
         var settings = await GetSettings();
-        var set = settings.Sets.FirstOrDefault(s => s.Id == setId);
+        var set = settings.Sets.FirstOrDefault(candidate => candidate.Id == setId);
         if (set == null)
             return NotFound();
 
-        await using var ctx = _dbContextFactory.CreateContext();
-
+        var pullPayments = await _tipcardService.GetPullPaymentsAsync(set.Cards);
         var vm = new TipcardSetDetailViewModel
         {
             SetId = set.Id,
@@ -186,37 +187,44 @@ public class TipcardsController : Controller
             CardHeadline = set.CardHeadline,
             CardText = set.CardText,
             QrLogo = set.QrLogo,
-            LightningConfigured = HasLightningPayouts()
+            LightningConfigured = _tipcardService.HasLightningPayouts(CurrentStore)
         };
 
-        foreach (var ppId in set.PullPaymentIds)
+        foreach (var card in set.Cards.OrderBy(card => card.CardNumber))
         {
-            var pp = await ctx.PullPayments
-                .Include(p => p.Payouts)
-                .FirstOrDefaultAsync(p => p.Id == ppId);
-
-            if (pp == null) continue;
-
-            var isClaimed = IsPullPaymentClaimed(pp);
+            var hasPullPayment = TryGetPullPayment(card, pullPayments, out var pullPayment);
+            var isClaimed = hasPullPayment && IsPullPaymentClaimed(pullPayment);
+            var isUnavailable = !isClaimed &&
+                                !string.IsNullOrEmpty(card.PullPaymentId) &&
+                                (!hasPullPayment || !pullPayment.IsRunning());
+            var sats = hasPullPayment ? GetSats(pullPayment) : set.SatsPerCard;
 
             if (isClaimed)
             {
                 vm.ClaimedCount++;
-                vm.ClaimedSats += set.SatsPerCard;
+                vm.ClaimedSats += sats;
+            }
+            else if (isUnavailable)
+            {
+                vm.UnavailableCount++;
             }
             else
             {
-                vm.FundedCount++;
-                vm.FundedSats += set.SatsPerCard;
+                vm.AvailableCount++;
+                vm.AvailableSats += sats;
             }
 
             vm.Cards.Add(new TipcardViewModel
             {
-                PullPaymentId = ppId,
-                Sats = set.SatsPerCard,
+                ClaimId = card.ClaimId,
+                CardNumber = card.CardNumber,
+                PullPaymentId = card.PullPaymentId,
+                Sats = sats,
+                IsActivated = !string.IsNullOrEmpty(card.PullPaymentId),
                 IsClaimed = isClaimed,
-                ClaimUrl = BuildClaimUrl(ppId),
-                LnurlBech32 = GetLnurlBech32(ppId)
+                IsUnavailable = isUnavailable,
+                ClaimUrl = BuildClaimUrl(CurrentStore.Id, card.ClaimId),
+                LnurlBech32 = GetLnurlBech32(CurrentStore.Id, card.ClaimId)
             });
         }
 
@@ -231,19 +239,17 @@ public class TipcardsController : Controller
             return NotFound();
 
         var settings = await GetSettings();
-        var set = settings.Sets.FirstOrDefault(s => s.Id == setId);
+        var set = settings.Sets.FirstOrDefault(candidate => candidate.Id == setId);
         if (set == null)
             return NotFound();
-
-        var claimedCount = await CountClaimedCards(set.PullPaymentIds);
 
         return View(new EditTipcardSetViewModel
         {
             SetId = set.Id,
             Name = set.Name,
             SatsPerCard = set.SatsPerCard,
-            NumberOfCards = set.NumberOfCards,
-            ClaimedCount = claimedCount,
+            NumberOfCards = set.Cards.Count,
+            ClaimedCount = await CountClaimedCards(set.Cards),
             CardHeadline = set.CardHeadline,
             CardText = set.CardText,
             QrLogo = set.QrLogo
@@ -257,90 +263,84 @@ public class TipcardsController : Controller
         if (CurrentStore == null)
             return NotFound();
 
+        model.SetId = setId;
         if (!ModelState.IsValid)
-            return View(model);
-
-        var settings = await GetSettings();
-        var set = settings.Sets.FirstOrDefault(s => s.Id == setId);
-        if (set == null)
-            return NotFound();
-
-        var satsChanged = model.SatsPerCard != set.SatsPerCard;
-        var countChanged = model.NumberOfCards != set.NumberOfCards;
-
-        if (satsChanged || countChanged)
         {
-            await using var ctx = _dbContextFactory.CreateContext();
-            var claimedIds = new List<string>();
-            var unclaimedIds = new List<string>();
+            model.ClaimedCount = await GetClaimedCountForSet(setId);
+            return View(model);
+        }
 
-            foreach (var ppId in set.PullPaymentIds)
-            {
-                var pp = await ctx.PullPayments
-                    .Include(p => p.Payouts)
-                    .FirstOrDefaultAsync(p => p.Id == ppId);
-                if (pp == null) continue;
+        using (await _storeLock.LockAsync(CurrentStore.Id, HttpContext.RequestAborted))
+        {
+            var settings = await GetSettings();
+            var set = settings.Sets.FirstOrDefault(candidate => candidate.Id == setId);
+            if (set == null)
+                return NotFound();
 
-                if (IsPullPaymentClaimed(pp))
-                    claimedIds.Add(ppId);
-                else
-                    unclaimedIds.Add(ppId);
-            }
+            var pullPayments = await _tipcardService.GetPullPaymentsAsync(set.Cards);
+            var claimedClaimIds = set.Cards
+                .Where(card => TryGetPullPayment(card, pullPayments, out var pullPayment) &&
+                               IsPullPaymentClaimed(pullPayment))
+                .Select(card => card.ClaimId)
+                .ToHashSet(StringComparer.Ordinal);
 
-            if (model.NumberOfCards < claimedIds.Count)
+            if (model.NumberOfCards < claimedClaimIds.Count)
             {
                 ModelState.AddModelError(nameof(model.NumberOfCards),
-                    $"Cannot reduce below {claimedIds.Count} (already claimed).");
-                model.ClaimedCount = claimedIds.Count;
+                    $"Cannot reduce below {claimedClaimIds.Count} (already claimed).");
+                model.ClaimedCount = claimedClaimIds.Count;
                 return View(model);
             }
 
-            var targetUnclaimed = model.NumberOfCards - claimedIds.Count;
+            var satsChanged = model.SatsPerCard != set.SatsPerCard;
+            var cardsToRemove = set.Cards
+                .Where(card => !claimedClaimIds.Contains(card.ClaimId))
+                .Reverse()
+                .Take(Math.Max(0, set.Cards.Count - model.NumberOfCards))
+                .ToList();
+            var removedClaimIds = cardsToRemove
+                .Select(card => card.ClaimId)
+                .ToHashSet(StringComparer.Ordinal);
 
+            var pullPaymentsToCancel = cardsToRemove
+                .Select(card => card.PullPaymentId)
+                .Where(id => !string.IsNullOrEmpty(id))
+                .ToList();
             if (satsChanged)
             {
-                foreach (var ppId in unclaimedIds)
-                    await _pullPaymentHostedService.Cancel(new PullPaymentHostedService.CancelRequest(ppId));
-                set.PullPaymentIds.RemoveAll(id => unclaimedIds.Contains(id));
-
-                for (int i = 0; i < targetUnclaimed; i++)
-                {
-                    var ppId = await CreateCardPullPayment(set.Id, model.Name,
-                        claimedIds.Count + i + 1, model.SatsPerCard / 100_000_000m);
-                    set.PullPaymentIds.Add(ppId);
-                }
+                pullPaymentsToCancel.AddRange(set.Cards
+                    .Where(card => !claimedClaimIds.Contains(card.ClaimId))
+                    .Select(card => card.PullPaymentId)
+                    .Where(id => !string.IsNullOrEmpty(id)));
             }
-            else if (countChanged)
+
+            await _tipcardService.CancelPullPaymentsAsync(CurrentStore.Id, pullPaymentsToCancel);
+
+            set.Cards.RemoveAll(card => removedClaimIds.Contains(card.ClaimId));
+            if (satsChanged)
             {
-                if (targetUnclaimed > unclaimedIds.Count)
-                {
-                    var toAdd = targetUnclaimed - unclaimedIds.Count;
-                    for (int i = 0; i < toAdd; i++)
-                    {
-                        var ppId = await CreateCardPullPayment(set.Id, model.Name,
-                            set.PullPaymentIds.Count + i + 1, set.SatsPerCard / 100_000_000m);
-                        set.PullPaymentIds.Add(ppId);
-                    }
-                }
-                else if (targetUnclaimed < unclaimedIds.Count)
-                {
-                    var toRemove = unclaimedIds.Count - targetUnclaimed;
-                    var idsToRemove = unclaimedIds.TakeLast(toRemove).ToList();
-                    foreach (var ppId in idsToRemove)
-                        await _pullPaymentHostedService.Cancel(new PullPaymentHostedService.CancelRequest(ppId));
-                    set.PullPaymentIds.RemoveAll(id => idsToRemove.Contains(id));
-                }
+                foreach (var card in set.Cards.Where(card => !claimedClaimIds.Contains(card.ClaimId)))
+                    card.PullPaymentId = null;
             }
 
-            set.SatsPerCard = model.SatsPerCard;
-            set.NumberOfCards = model.NumberOfCards;
-        }
+            if (model.NumberOfCards > set.Cards.Count)
+            {
+                var nextCardNumber = set.Cards.Count == 0
+                    ? 1
+                    : set.Cards.Max(card => card.CardNumber) + 1;
+                set.Cards.AddRange(TipcardService.CreateCards(
+                    model.NumberOfCards - set.Cards.Count,
+                    nextCardNumber));
+            }
 
-        set.Name = model.Name;
-        set.CardHeadline = model.CardHeadline;
-        set.CardText = model.CardText;
-        set.QrLogo = model.QrLogo;
-        await SaveSettings(settings);
+            set.Name = model.Name;
+            set.SatsPerCard = model.SatsPerCard;
+            set.NumberOfCards = set.Cards.Count;
+            set.CardHeadline = model.CardHeadline;
+            set.CardText = model.CardText;
+            set.QrLogo = model.QrLogo;
+            await _tipcardService.SaveSettingsAsync(CurrentStore.Id, settings);
+        }
 
         TempData.SetStatusMessageModel(new StatusMessageModel
         {
@@ -351,54 +351,48 @@ public class TipcardsController : Controller
         return RedirectToAction(nameof(ViewSet), new { storeId, setId });
     }
 
-    [HttpGet("~/plugins/tipcards/claim/{pullPaymentId}")]
+    [HttpGet("~/plugins/tipcards/claim/{storeId}/{claimId}")]
     [AllowAnonymous]
-    public async Task<IActionResult> ClaimCard(string pullPaymentId)
+    [ResponseCache(Location = ResponseCacheLocation.None, NoStore = true)]
+    public async Task<IActionResult> ClaimCard(string storeId, string claimId, CancellationToken cancellationToken)
     {
-        await using var ctx = _dbContextFactory.CreateContext();
-        var pp = await ctx.PullPayments
-            .Include(p => p.Payouts)
-            .FirstOrDefaultAsync(p => p.Id == pullPaymentId && !p.Archived);
-
-        if (pp == null)
+        var activation = await _tipcardService.EnsurePullPaymentAsync(storeId, claimId, cancellationToken);
+        if (activation.Status == TipcardActivationStatus.NotFound)
             return NotFound();
 
-        var blob = pp.GetBlob();
-        if (!blob.Name.StartsWith("Tipcard"))
-            return NotFound();
-
-        var store = await _storeRepository.FindStore(pp.StoreId);
+        var store = activation.Store;
+        var set = activation.Set;
+        var pullPayment = activation.PullPayment;
         var storeBlob = store.GetStoreBlob();
-        var isClaimed = IsPullPaymentClaimed(pp);
-        var supportsLnurl = _pullPaymentHostedService.SupportsLNURL(pp, blob);
-
-        var settings = await _storeRepository.GetSettingAsync<TipcardsStoreSettings>(pp.StoreId, SettingsKey)
-                       ?? new TipcardsStoreSettings();
-        settings.WalletRecommendations ??= TipcardsStoreSettings.DefaultWalletRecommendations;
-
-        var setData = FindSetForPullPayment(settings, pullPaymentId);
-
-        var sats = (long)(pp.Limit * 100_000_000m);
-        var pullPaymentUrl = Url.Action("ViewPullPayment", "UIPullPayment",
-            new { pullPaymentId }, Request.Scheme, Request.Host.ToString());
+        var settings = await _tipcardService.GetSettingsAsync(storeId);
+        var isClaimed = pullPayment != null && IsPullPaymentClaimed(pullPayment);
+        var supportsLnurl = activation.Status == TipcardActivationStatus.Ready &&
+                            activation.LightningConfigured &&
+                            _tipcardService.SupportsLnurl(pullPayment);
+        var sats = pullPayment == null ? set.SatsPerCard : GetSats(pullPayment);
+        var pullPaymentUrl = pullPayment == null
+            ? null
+            : Url.Action("ViewPullPayment", "UIPullPayment",
+                new { pullPaymentId = pullPayment.Id }, Request.Scheme, Request.Host.ToString());
 
         var vm = new TipcardClaimViewModel
         {
-            PullPaymentId = pp.Id,
+            PullPaymentId = pullPayment?.Id,
             Sats = sats,
             StoreName = store.StoreName,
             SupportsLNURL = supportsLnurl,
             IsClaimed = isClaimed,
-            LnurlBech32 = supportsLnurl ? GetLnurlBech32(pullPaymentId) : null,
+            LnurlBech32 = supportsLnurl ? GetLnurlBech32(storeId, claimId) : null,
             PullPaymentUrl = pullPaymentUrl,
-            Headline = setData?.CardHeadline ?? "You received a tip!",
-            CardText = setData?.CardText ?? "Scan this QR code with a Lightning wallet to claim your sats.",
-            QrLogo = setData?.QrLogo ?? QrLogoType.Bitcoin,
+            Headline = set.CardHeadline,
+            CardText = set.CardText,
+            QrLogo = set.QrLogo,
             ShowWalletRecommendations = settings.ShowWalletRecommendations,
-            WalletRecommendations = settings.WalletRecommendations
+            WalletRecommendations = settings.WalletRecommendations,
+            UnavailableMessage = GetUnavailableMessage(activation.Status)
         };
 
-        var fiatResult = await GetFiatValue(sats, storeBlob, pp.StoreId);
+        var fiatResult = await GetFiatValue(sats, storeBlob, storeId);
         if (fiatResult != null)
         {
             vm.FiatAmount = fiatResult.Value.amount;
@@ -413,6 +407,49 @@ public class TipcardsController : Controller
         return View(vm);
     }
 
+    [EnableCors(CorsPolicies.All)]
+    [HttpGet("~/plugins/tipcards/withdraw/{storeId}/{claimId}")]
+    [AllowAnonymous]
+    [ResponseCache(Location = ResponseCacheLocation.None, NoStore = true)]
+    public async Task<IActionResult> WithdrawCard(
+        string storeId,
+        string claimId,
+        [FromQuery] string pr,
+        CancellationToken cancellationToken)
+    {
+        var activation = await _tipcardService.EnsurePullPaymentAsync(storeId, claimId, cancellationToken);
+        if (activation.Status == TipcardActivationStatus.NotFound)
+            return NotFound();
+
+        if (activation.Status != TipcardActivationStatus.Ready ||
+            !activation.LightningConfigured ||
+            !_tipcardService.SupportsLnurl(activation.PullPayment))
+        {
+            return BadRequest(new LNUrlStatusResponse
+            {
+                Status = "ERROR",
+                Reason = GetUnavailableMessage(activation.Status)
+            });
+        }
+
+        var cryptoCode = _networkProvider.DefaultNetwork?.CryptoCode;
+        if (string.IsNullOrEmpty(cryptoCode))
+        {
+            return BadRequest(new LNUrlStatusResponse
+            {
+                Status = "ERROR",
+                Reason = "Lightning withdrawals are unavailable right now."
+            });
+        }
+
+        _lnurlController.ControllerContext.HttpContext = HttpContext;
+        return await _lnurlController.GetLNURLForPullPayment(
+            cryptoCode,
+            activation.PullPayment.Id,
+            pr,
+            cancellationToken);
+    }
+
     [HttpGet("~/plugins/{storeId}/tipcards/{setId}/print")]
     [Authorize(Policy = Policies.CanModifyStoreSettings, AuthenticationSchemes = AuthenticationSchemes.Cookie)]
     public async Task<IActionResult> PrintSet(string storeId, string setId)
@@ -421,15 +458,14 @@ public class TipcardsController : Controller
             return NotFound();
 
         var settings = await GetSettings();
-        var set = settings.Sets.FirstOrDefault(s => s.Id == setId);
+        var set = settings.Sets.FirstOrDefault(candidate => candidate.Id == setId);
         if (set == null)
             return NotFound();
 
-        var store = await _storeRepository.FindStore(storeId);
+        var store = await _storeRepository.FindStore(CurrentStore.Id);
         var storeBlob = store.GetStoreBlob();
         var branding = await StoreBrandingViewModel.CreateAsync(Request, _uriResolver, storeBlob);
-
-        await using var ctx = _dbContextFactory.CreateContext();
+        var pullPayments = await _tipcardService.GetPullPaymentsAsync(set.Cards);
 
         var vm = new PrintTipcardSetViewModel
         {
@@ -441,23 +477,20 @@ public class TipcardsController : Controller
             QrLogo = set.QrLogo
         };
 
-        foreach (var ppId in set.PullPaymentIds)
+        foreach (var card in set.Cards.OrderBy(card => card.CardNumber))
         {
-            var pp = await ctx.PullPayments
-                .Include(p => p.Payouts)
-                .FirstOrDefaultAsync(p => p.Id == ppId);
-
-            if (pp == null) continue;
-
-            var isClaimed = IsPullPaymentClaimed(pp);
-
+            var hasPullPayment = TryGetPullPayment(card, pullPayments, out var pullPayment);
+            var isClaimed = hasPullPayment && IsPullPaymentClaimed(pullPayment);
             vm.Cards.Add(new PrintTipcardItem
             {
-                PullPaymentId = ppId,
-                ClaimUrl = BuildClaimUrl(ppId),
-                LnurlBech32 = GetLnurlBech32(ppId),
-                Sats = set.SatsPerCard,
-                IsClaimed = isClaimed
+                ClaimId = card.ClaimId,
+                CardNumber = card.CardNumber,
+                ClaimUrl = BuildClaimUrl(CurrentStore.Id, card.ClaimId),
+                Sats = hasPullPayment ? GetSats(pullPayment) : set.SatsPerCard,
+                IsClaimed = isClaimed,
+                IsUnavailable = !isClaimed &&
+                                !string.IsNullOrEmpty(card.PullPaymentId) &&
+                                (!hasPullPayment || !pullPayment.IsRunning())
             });
         }
 
@@ -466,19 +499,24 @@ public class TipcardsController : Controller
 
     [HttpGet("~/plugins/{storeId}/tipcards/{setId}/pdf")]
     [Authorize(Policy = Policies.CanModifyStoreSettings, AuthenticationSchemes = AuthenticationSchemes.Cookie)]
-    public async Task<IActionResult> DownloadPdf(string storeId, string setId,
-        string paper = "A4", int columns = 3, bool markers = true,
-        double? customW = null, double? customH = null)
+    public async Task<IActionResult> DownloadPdf(
+        string storeId,
+        string setId,
+        string paper = "A4",
+        int columns = 3,
+        bool markers = true,
+        double? customW = null,
+        double? customH = null)
     {
         if (CurrentStore == null)
             return NotFound();
 
         var settings = await GetSettings();
-        var set = settings.Sets.FirstOrDefault(s => s.Id == setId);
+        var set = settings.Sets.FirstOrDefault(candidate => candidate.Id == setId);
         if (set == null)
             return NotFound();
 
-        await using var ctx = _dbContextFactory.CreateContext();
+        var pullPayments = await _tipcardService.GetPullPaymentsAsync(set.Cards);
         var (pageW, pageH) = paper switch
         {
             "A3" => (297.0, 420.0),
@@ -499,20 +537,18 @@ public class TipcardsController : Controller
             QrLogo = set.QrLogo
         };
 
-        foreach (var ppId in set.PullPaymentIds)
+        foreach (var card in set.Cards.OrderBy(card => card.CardNumber))
         {
-            var pp = await ctx.PullPayments
-                .Include(p => p.Payouts)
-                .FirstOrDefaultAsync(p => p.Id == ppId);
-            if (pp == null) continue;
-
-            if (IsPullPaymentClaimed(pp))
+            var hasPullPayment = TryGetPullPayment(card, pullPayments, out var pullPayment);
+            var isUnavailable = !string.IsNullOrEmpty(card.PullPaymentId) &&
+                                (!hasPullPayment || !pullPayment.IsRunning());
+            if (isUnavailable || hasPullPayment && IsPullPaymentClaimed(pullPayment))
                 continue;
 
             pdfRequest.Cards.Add(new TipcardPdfItem
             {
-                ClaimUrl = BuildClaimUrl(ppId),
-                Sats = set.SatsPerCard
+                ClaimUrl = BuildClaimUrl(CurrentStore.Id, card.ClaimId),
+                Sats = hasPullPayment ? GetSats(pullPayment) : set.SatsPerCard
             });
         }
 
@@ -537,13 +573,14 @@ public class TipcardsController : Controller
             return NotFound();
 
         var settings = await GetSettings();
-        var set = settings.Sets.FirstOrDefault(s => s.Id == setId);
+        var set = settings.Sets.FirstOrDefault(candidate => candidate.Id == setId);
         if (set == null)
             return NotFound();
 
+        var activatedCount = set.Cards.Count(card => !string.IsNullOrEmpty(card.PullPaymentId));
         return View("Confirm", new ConfirmModel(
             "Delete Tipcard Set",
-            $"This will archive all {set.NumberOfCards} pull payments in the set \"{set.Name}\". Are you sure?",
+            $"This will archive {activatedCount} activated pull payments and invalidate all cards in the set \"{set.Name}\". Are you sure?",
             "Delete"));
     }
 
@@ -554,22 +591,24 @@ public class TipcardsController : Controller
         if (CurrentStore == null)
             return NotFound();
 
-        var settings = await GetSettings();
-        var set = settings.Sets.FirstOrDefault(s => s.Id == setId);
-        if (set == null)
-            return NotFound();
-
-        foreach (var ppId in set.PullPaymentIds)
+        string setName;
+        using (await _storeLock.LockAsync(CurrentStore.Id, HttpContext.RequestAborted))
         {
-            await _pullPaymentHostedService.Cancel(new PullPaymentHostedService.CancelRequest(ppId));
-        }
+            var settings = await GetSettings();
+            var set = settings.Sets.FirstOrDefault(candidate => candidate.Id == setId);
+            if (set == null)
+                return NotFound();
 
-        settings.Sets.Remove(set);
-        await SaveSettings(settings);
+            await _tipcardService.CancelPullPaymentsAsync(CurrentStore.Id,
+                set.Cards.Select(card => card.PullPaymentId));
+            setName = set.Name;
+            settings.Sets.Remove(set);
+            await _tipcardService.SaveSettingsAsync(CurrentStore.Id, settings);
+        }
 
         TempData.SetStatusMessageModel(new StatusMessageModel
         {
-            Message = $"Tipcard set \"{set.Name}\" deleted.",
+            Message = $"Tipcard set \"{setName}\" deleted.",
             Severity = StatusMessageModel.StatusSeverity.Success
         });
 
@@ -588,7 +627,7 @@ public class TipcardsController : Controller
         {
             ShowWalletRecommendations = settings.ShowWalletRecommendations,
             WalletRecommendationsJson = JsonConvert.SerializeObject(
-                settings.WalletRecommendations ?? TipcardsStoreSettings.DefaultWalletRecommendations,
+                settings.WalletRecommendations,
                 Formatting.Indented)
         });
     }
@@ -600,14 +639,13 @@ public class TipcardsController : Controller
         if (CurrentStore == null)
             return NotFound();
 
-        var settings = await GetSettings();
-        settings.ShowWalletRecommendations = model.ShowWalletRecommendations;
-
+        List<WalletRecommendation> walletRecommendations = null;
         if (!string.IsNullOrWhiteSpace(model.WalletRecommendationsJson))
         {
             try
             {
-                settings.WalletRecommendations = JsonConvert.DeserializeObject<List<WalletRecommendation>>(model.WalletRecommendationsJson);
+                walletRecommendations = JsonConvert.DeserializeObject<List<WalletRecommendation>>(
+                    model.WalletRecommendationsJson);
             }
             catch
             {
@@ -616,7 +654,15 @@ public class TipcardsController : Controller
             }
         }
 
-        await SaveSettings(settings);
+        using (await _storeLock.LockAsync(CurrentStore.Id, HttpContext.RequestAborted))
+        {
+            var settings = await GetSettings();
+            settings.ShowWalletRecommendations = model.ShowWalletRecommendations;
+            if (walletRecommendations != null)
+                settings.WalletRecommendations = walletRecommendations;
+            await _tipcardService.SaveSettingsAsync(CurrentStore.Id, settings);
+        }
+
         TempData.SetStatusMessageModel(new StatusMessageModel
         {
             Message = "Tipcards settings updated.",
@@ -625,17 +671,13 @@ public class TipcardsController : Controller
         return RedirectToAction(nameof(Settings), new { storeId });
     }
 
-    private bool HasLightningPayouts()
-    {
-        var pm = PayoutMethodId.Parse("BTC-LN");
-        var paymentMethods = _payoutHandlers.GetSupportedPayoutMethods(HttpContext.GetStoreData());
-        return paymentMethods.Contains(pm);
-    }
-
-    private async Task<(decimal amount, string currency)?> GetFiatValue(long sats, StoreBlob storeBlob, string storeId)
+    private async Task<(decimal amount, string currency)?> GetFiatValue(
+        long sats,
+        StoreBlob storeBlob,
+        string storeId)
     {
         var defaultCurrency = storeBlob.DefaultCurrency;
-        if (string.IsNullOrEmpty(defaultCurrency) || defaultCurrency == "BTC" || defaultCurrency == "SATS")
+        if (string.IsNullOrEmpty(defaultCurrency) || defaultCurrency is "BTC" or "SATS")
             return null;
 
         try
@@ -659,93 +701,88 @@ public class TipcardsController : Controller
         }
     }
 
-    private string GetLnurlBech32(string pullPaymentId)
+    private string GetLnurlBech32(string storeId, string claimId)
     {
-        var cryptoCode = _networkProvider.DefaultNetwork?.CryptoCode ?? "BTC";
-        var lnurlEndpoint = new Uri(Url.Action("GetLNURLForPullPayment", "UILNURL",
-            new { cryptoCode, pullPaymentId },
-            Request.Scheme, Request.Host.ToString())!);
-        return LNURL.LNURL.EncodeUri(lnurlEndpoint, "withdrawRequest", true).ToString().ToUpperInvariant();
+        var lnurlEndpoint = new Uri(Url.Action(nameof(WithdrawCard), "Tipcards",
+            new { storeId, claimId },
+            Request.Scheme,
+            Request.Host.ToString())!);
+        return LNURL.LNURL.EncodeUri(lnurlEndpoint, "withdrawRequest", true)
+            .ToString()
+            .ToUpperInvariant();
     }
 
-    private string BuildClaimUrl(string pullPaymentId)
+    private string BuildClaimUrl(string storeId, string claimId)
     {
         var baseClaimUrl = Url.Action(nameof(ClaimCard), "Tipcards",
-            new { pullPaymentId }, Request.Scheme, Request.Host.ToString());
-        var lnurl = GetLnurlBech32(pullPaymentId);
-        return $"{baseClaimUrl}?lightning={lnurl}";
+            new { storeId, claimId },
+            Request.Scheme,
+            Request.Host.ToString());
+        return $"{baseClaimUrl}?lightning={GetLnurlBech32(storeId, claimId)}";
     }
 
-    private static TipcardSetData FindSetForPullPayment(TipcardsStoreSettings settings, string pullPaymentId)
+    private static bool TryGetPullPayment(
+        TipcardData card,
+        IReadOnlyDictionary<string, PullPaymentData> pullPayments,
+        out PullPaymentData pullPayment)
     {
-        return settings.Sets.FirstOrDefault(s => s.PullPaymentIds.Contains(pullPaymentId));
+        pullPayment = null;
+        return !string.IsNullOrEmpty(card.PullPaymentId) &&
+               pullPayments.TryGetValue(card.PullPaymentId, out pullPayment);
     }
 
-    private static bool IsPullPaymentClaimed(PullPaymentData pp)
+    public static bool IsPullPaymentClaimed(PullPaymentData pullPayment)
     {
-        var completed = pp.Payouts
-            .Where(p => p.State is PayoutState.Completed or PayoutState.InProgress)
-            .Sum(p => p.OriginalAmount);
+        var payouts = pullPayment.Payouts ?? new List<PayoutData>();
+        var completed = payouts
+            .Where(payout => payout.State is PayoutState.Completed or PayoutState.InProgress)
+            .Sum(payout => payout.OriginalAmount);
         if (completed > 0)
             return true;
 
-        var awaiting = pp.Payouts
-            .Where(p => p.State is PayoutState.AwaitingPayment or PayoutState.AwaitingApproval)
-            .Sum(p => p.OriginalAmount);
+        var awaiting = payouts
+            .Where(payout => payout.State is PayoutState.AwaitingPayment or PayoutState.AwaitingApproval)
+            .Sum(payout => payout.OriginalAmount);
         return awaiting > 0;
     }
 
-    private async Task<TipcardsStoreSettings> GetSettings()
+    private static long GetSats(PullPaymentData pullPayment)
     {
-        var settings = await _storeRepository.GetSettingAsync<TipcardsStoreSettings>(CurrentStore.Id, SettingsKey)
-                       ?? new TipcardsStoreSettings();
-        settings.WalletRecommendations ??= TipcardsStoreSettings.DefaultWalletRecommendations;
-        return settings;
+        return (long)(pullPayment.Limit * 100_000_000m);
     }
 
-    private async Task SaveSettings(TipcardsStoreSettings settings)
+    private static string GetUnavailableMessage(TipcardActivationStatus status)
     {
-        await _storeRepository.UpdateSetting(CurrentStore.Id, SettingsKey, settings);
-    }
-
-    private async Task<string> CreateCardPullPayment(string setId, string setName, int cardNumber, decimal amountInBtc)
-    {
-        var selectedPaymentMethodIds = new[] { PayoutMethodId.Parse("BTC-CHAIN"), PayoutMethodId.Parse("BTC-LN") };
-        var paymentMethods = _payoutHandlers.GetSupportedPayoutMethods(HttpContext.GetStoreData());
-
-        return await _pullPaymentHostedService.CreatePullPayment(HttpContext.GetStoreData(), new()
+        return status switch
         {
-            Amount = amountInBtc,
-            Currency = "BTC",
-            Name = $"Tipcard {setName} #{cardNumber}",
-            Description = $"tipcard-set:{setId}",
-            PayoutMethods = selectedPaymentMethodIds
-                .Where(id => paymentMethods.Contains(id))
-                .Select(c => c.ToString()).ToArray(),
-            BOLT11Expiration = TimeSpan.FromDays(365),
-            AutoApproveClaims = true
-        });
+            TipcardActivationStatus.LightningUnavailable =>
+                "This tipcard cannot be claimed right now because Lightning payouts are not configured. Please contact the person who gave you this card.",
+            TipcardActivationStatus.PullPaymentUnavailable =>
+                "This tipcard is unavailable. Please contact the person who gave you this card.",
+            TipcardActivationStatus.Failed =>
+                "This tipcard could not be prepared right now. Please try again later.",
+            _ => "Lightning withdrawals are unavailable right now."
+        };
     }
 
-    private async Task<int> CountClaimedCards(List<string> pullPaymentIds)
+    private Task<TipcardsStoreSettings> GetSettings()
     {
-        if (!pullPaymentIds.Any()) return 0;
+        return _tipcardService.GetSettingsAsync(CurrentStore.Id);
+    }
 
-        await using var ctx = _dbContextFactory.CreateContext();
-        int claimed = 0;
+    private async Task<int> CountClaimedCards(IEnumerable<TipcardData> cards)
+    {
+        var cardList = cards.ToList();
+        var pullPayments = await _tipcardService.GetPullPaymentsAsync(cardList);
+        return cardList.Count(card =>
+            TryGetPullPayment(card, pullPayments, out var pullPayment) &&
+            IsPullPaymentClaimed(pullPayment));
+    }
 
-        foreach (var ppId in pullPaymentIds)
-        {
-            var pp = await ctx.PullPayments
-                .Include(p => p.Payouts)
-                .FirstOrDefaultAsync(p => p.Id == ppId);
-
-            if (pp == null) continue;
-
-            if (IsPullPaymentClaimed(pp))
-                claimed++;
-        }
-
-        return claimed;
+    private async Task<int> GetClaimedCountForSet(string setId)
+    {
+        var settings = await GetSettings();
+        var set = settings.Sets.FirstOrDefault(candidate => candidate.Id == setId);
+        return set == null ? 0 : await CountClaimedCards(set.Cards);
     }
 }

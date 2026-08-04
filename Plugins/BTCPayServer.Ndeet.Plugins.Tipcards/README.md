@@ -1,6 +1,6 @@
 # Tipcards
 
-Tipcards is a store-level BTCPay Server plugin for creating printable Lightning tip cards. A store owner creates a set of cards, each card receives its own BTCPay pull payment, and the printed QR code opens a public claim page with an LNURL-withdraw flow.
+Tipcards is a store-level BTCPay Server plugin for creating printable Lightning tip cards. A store owner creates a set of cards, and each printed QR code opens a public claim page with an LNURL-withdraw flow. A card receives its BTCPay pull payment only when it is first scanned.
 
 The plugin is useful for handing out small amounts of sats at meetups, events, workshops, merchant onboarding sessions, or as simple paper vouchers.
 
@@ -14,7 +14,7 @@ The plugin is useful for handing out small amounts of sats at meetups, events, w
 
 - Create named tipcard sets with a configurable number of cards.
 - Set the amount per card in sats.
-- Generate one pull payment per card.
+- Create each card's pull payment lazily on its first scan.
 - Use public claim pages that do not require a BTCPay account.
 - Embed LNURL-withdraw data in the claim flow for compatible Lightning wallets.
 - Show claimed, unclaimed, and total sats per set.
@@ -31,9 +31,10 @@ The plugin is useful for handing out small amounts of sats at meetups, events, w
 1. Open the store where the cards should be funded from.
 2. Go to the Tipcards entry under the store integrations navigation.
 3. Create a new set with a name, sats-per-card amount, and card count.
-4. The plugin creates pull payments for the cards and stores the pull payment IDs in store settings.
+4. The plugin creates stable card identities without creating pull payments.
 5. Print or download the unclaimed cards as a PDF.
-6. Recipients scan a QR code, open the public claim page, and claim the sats with a Lightning wallet.
+6. The first browser or Lightning-wallet scan creates that card's pull payment.
+7. Recipients claim the sats with a Lightning wallet; later scans reuse the same pull payment.
 
 ## Card Sets
 
@@ -42,7 +43,7 @@ Each set stores:
 - Set name.
 - Sats per card.
 - Number of cards.
-- Pull payment IDs for the generated cards.
+- Random public claim IDs and an optional pull payment ID after activation.
 - Creation date.
 - Card headline.
 - Card text.
@@ -55,9 +56,9 @@ Card counts are limited to 500 cards per set. Amounts must be at least 1 sat.
 Existing sets can be edited after creation.
 
 - Changing text or QR logo settings updates the set metadata.
-- Changing the sats amount recreates unclaimed cards with new pull payments.
-- Increasing the card count creates additional pull payments.
-- Decreasing the card count cancels unclaimed pull payments.
+- Changing the sats amount resets activated, unclaimed pull payments while preserving the cards' QR codes.
+- Increasing the card count creates additional lazy cards without pull payments.
+- Decreasing the card count cancels only activated, unclaimed pull payments being removed.
 - The card count cannot be reduced below the number of already claimed cards.
 
 ## Claim Page
@@ -84,5 +85,5 @@ Default recommendations include Blitz Wallet, Wallet of Satoshi, Aqua Wallet, an
 
 - Tipcards require Lightning payouts to be configured before sets can be created.
 - Printed and PDF views include only unclaimed cards.
-- Deleting a set cancels the related pull payments and removes the set from plugin settings.
+- Deleting a set cancels its activated pull payments, invalidates its unactivated cards, and removes the set from plugin settings.
 - This plugin is intended for small tip-card workflows, not high-volume voucher issuance.

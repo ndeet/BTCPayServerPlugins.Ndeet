@@ -11,6 +11,7 @@ public class TipcardSetViewModel
     public int TotalCards { get; set; }
     public int ClaimedCards { get; set; }
     public long SatsPerCard { get; set; }
+    public long TotalSats { get; set; }
     public DateTimeOffset CreatedDate { get; set; }
 }
 
@@ -57,8 +58,9 @@ public class TipcardSetDetailViewModel
     public QrLogoType QrLogo { get; set; }
     public int ClaimedCount { get; set; }
     public long ClaimedSats { get; set; }
-    public int FundedCount { get; set; }
-    public long FundedSats { get; set; }
+    public int AvailableCount { get; set; }
+    public long AvailableSats { get; set; }
+    public int UnavailableCount { get; set; }
     public bool LightningConfigured { get; set; }
     public List<TipcardViewModel> Cards { get; set; } = new();
 }
@@ -95,9 +97,13 @@ public class EditTipcardSetViewModel
 
 public class TipcardViewModel
 {
+    public string ClaimId { get; set; }
+    public int CardNumber { get; set; }
     public string PullPaymentId { get; set; }
     public long Sats { get; set; }
+    public bool IsActivated { get; set; }
     public bool IsClaimed { get; set; }
+    public bool IsUnavailable { get; set; }
     public string ClaimUrl { get; set; }
     public string LnurlBech32 { get; set; }
 }
@@ -121,6 +127,7 @@ public class TipcardClaimViewModel
     public List<WalletRecommendation> WalletRecommendations { get; set; } = new();
     public decimal? FiatAmount { get; set; }
     public string FiatCurrency { get; set; }
+    public string UnavailableMessage { get; set; }
 }
 
 public class PrintTipcardSetViewModel
@@ -136,11 +143,12 @@ public class PrintTipcardSetViewModel
 
 public class PrintTipcardItem
 {
-    public string PullPaymentId { get; set; }
+    public string ClaimId { get; set; }
+    public int CardNumber { get; set; }
     public string ClaimUrl { get; set; }
-    public string LnurlBech32 { get; set; }
     public long Sats { get; set; }
     public bool IsClaimed { get; set; }
+    public bool IsUnavailable { get; set; }
 }
 
 public class TipcardsSettingsViewModel

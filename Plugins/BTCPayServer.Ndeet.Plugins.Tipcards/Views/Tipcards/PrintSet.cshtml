@@ -7,7 +7,7 @@
 @inject ContentSecurityPolicies Csp
 @{
     Layout = null;
-    var unclaimed = Model.Cards.Where(c => !c.IsClaimed).ToList();
+    var unclaimed = Model.Cards.Where(card => !card.IsClaimed && !card.IsUnavailable).ToList();
     var storeId = ViewContext.RouteData.Values["storeId"]?.ToString();
     var setId = ViewContext.RouteData.Values["setId"]?.ToString();
     var pdfUrl = Url.Action("DownloadPdf", "Tipcards", new { storeId, setId });

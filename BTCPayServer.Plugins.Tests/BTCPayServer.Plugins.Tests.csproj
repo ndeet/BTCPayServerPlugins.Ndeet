@@ -35,6 +35,9 @@
         <ProjectReference Include="..\Plugins\BTCPayServer.Ndeet.Plugins.AmbassadorToolbox\BTCPayServer.Ndeet.Plugins.AmbassadorToolbox.csproj">
             <PrivateAssets>all</PrivateAssets>
         </ProjectReference>
+        <ProjectReference Include="..\Plugins\BTCPayServer.Ndeet.Plugins.Tipcards\BTCPayServer.Ndeet.Plugins.Tipcards.csproj">
+            <PrivateAssets>all</PrivateAssets>
+        </ProjectReference>
     </ItemGroup>
 
 </Project>

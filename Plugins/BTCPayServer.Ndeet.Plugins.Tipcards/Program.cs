@@ -13,6 +13,8 @@ public class TipcardsPlugin : BaseBTCPayServerPlugin
 
     public override void Execute(IServiceCollection applicationBuilder)
     {
+        applicationBuilder.AddSingleton<TipcardStoreLock>();
+        applicationBuilder.AddSingleton<TipcardService>();
         applicationBuilder.AddUIExtension("store-integrations-nav", "TipcardsNav");
         base.Execute(applicationBuilder);
     }
